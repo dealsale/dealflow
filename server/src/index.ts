@@ -62,6 +62,10 @@ if (process.env.FOTOS_LANDING_PREPARAR !== 'off') {
   }, 45_000).unref();
 }
 import('./correo.js').then((m) => m.iniciarCorreos()).catch((e) => console.error('[correo]', e));
+// Bodega DealFlow: despacha los pedidos confirmados de sus productos, reintenta y avisa a los proveedores.
+import('./bodegaDF.js').then((m) => m.iniciarBodegaDF()).catch((e) => console.error('[bodega-df]', e));
+// Envíos del bot que fallaron por un problema pasajero: se reintentan solos (el bot no suelta el chat).
+import('./wa.js').then((w) => { setInterval(() => { void w.reintentarEnviosBot().catch((e) => console.error('[wa] reintentos', e)); }, 90_000).unref?.(); if (process.env.NODE_ENV === 'production') setTimeout(() => { void w.retomarChatsAlArrancar(); }, 45_000).unref?.(); }).catch((e) => console.error('[wa] reintentos', e));
 import('./avisosEstado.js').then((m) => m.iniciarAvisosEstado()).catch((e) => console.error('[avisos]', e));
 import('./remarketing.js').then((m) => m.iniciarRemarketing()).catch((e) => console.error('[remarketing]', e));
 import('./calidad.js').then((m) => m.iniciarVigilanciaCalidad()).catch((e) => console.error('[calidad]', e));
@@ -245,7 +249,7 @@ app.get('/salud', (_req, res) =>
   res.json({
     ok: true,
     // Marca de build para saber qué versión está en vivo (sube al desplegar).
-    build: 'opciones-chat-11241700',
+    build: 'bodega-df-11241900',
     // Con el volumen de Railway montado en /srv/data, esto lo confirma.
     datosPersistentes: process.env.RAILWAY_VOLUME_MOUNT_PATH === '/srv/data' || undefined,
     // Diagnóstico de almacenamiento: si dataDir NO apunta al volumen, la base es

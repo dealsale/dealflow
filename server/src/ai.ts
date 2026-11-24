@@ -1491,7 +1491,7 @@ export async function crearPedido(storeId: string, lead: { id: string; nombre: s
     const confPrev = String(previo.confirmacion || '');
     const idi = idiomaDe(storeId, lead.id) === 'en' ? 'en' : 'es';
     let msg: string;
-    if (confPrev !== 'si' && sp.confirmaAlCambiar(lead.id, String(previo.id))) {
+    if (confPrev !== 'si' && (sp.confirmaAlCambiar(lead.id, String(previo.id)) || sp.confirmoResumenReciente(lead.id))) {
       // «Sí, pero cámbiame…»: ya aceptó; con el cambio hecho queda confirmado.
       msg = sp.textoResumenPedido(storeId, String(previo.id), 'registrado', idi);
       await sp.confirmarPedidoCliente(storeId, String(previo.id), ultCliente, { aviso: false, titulo: 'Pedido confirmado: el cliente dijo que sí y el cambio que pidió ya se hizo' });

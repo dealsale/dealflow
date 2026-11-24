@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { db, pj, registrarLog } from './db.js';
 import { trazar, trazarApi } from './trazabilidad.js';
 import { cifrarTexto, descifrarTexto } from './cifrado.js';
@@ -35,8 +35,37 @@ try { db.exec("ALTER TABLE orders ADD COLUMN skydropx_envio TEXT NOT NULL DEFAUL
 const PAQUETE_BASE: PaqueteSky = { largo: 20, ancho: 15, alto: 10, peso: 1, contenido: 'Productos de la tienda' };
 const ORIGEN_BASE: OrigenSky = { nombre: '', empresa: '', telefono: '', email: '', direccion: '', referencia: '', departamento: '', ciudad: '', nit: '' };
 
+// ── Cuenta de la Bodega DealFlow ──────────────────────────────────────
+// Los productos de la Bodega DealFlow (Biblioteca) se despachan con la cuenta de Skydropx de
+// DEALFLOW, no con la de la tienda. Sus credenciales van en variables de Railway:
+//   SKYDROPX_DF_CLIENT_ID, SKYDROPX_DF_CLIENT_SECRET, SKYDROPX_DF_AMBIENTE (produccion|sandbox).
+export const CUENTA_DF = '__bodegadf__';
+export interface OpcionesDF { origen: OrigenSky; paquete: PaqueteSky }
+export function cfgSkydropxDF(): CfgSky | null {
+  const clientId = String(process.env.SKYDROPX_DF_CLIENT_ID || '').trim();
+  const clientSecret = String(process.env.SKYDROPX_DF_CLIENT_SECRET || '').trim();
+  if (!clientId || !clientSecret) return null;
+  return {
+    clientId, clientSecret, ambiente: String(process.env.SKYDROPX_DF_AMBIENTE || '').trim().toLowerCase() === 'sandbox' ? 'sandbox' : 'produccion',
+    origen: { ...ORIGEN_BASE }, paquete: { ...PAQUETE_BASE }, webhookToken: tokenWebhookDF(),
+  };
+}
+/** Token de la URL del webhook de la cuenta DealFlow (se pega en Skydropx → Conexiones → Webhooks). */
+export function tokenWebhookDF(): string {
+  const fijo = String(process.env.SKYDROPX_DF_WEBHOOK_TOKEN || '').trim();
+  if (fijo.length >= 20) return fijo;
+  const s = String(process.env.SKYDROPX_DF_CLIENT_SECRET || '').trim();
+  return s ? createHash('sha256').update('df-webhook:' + s).digest('hex').slice(0, 40) : '';
+}
+/** Cuenta con la que se maneja el envío de un pedido: la de DealFlow si salió por la bodega. */
+function cuentaDelPedido(storeId: string, orderId: string): { cuenta: string; c: CfgSky | null } {
+  const o = db.prepare('SELECT despacho_proveedor FROM orders WHERE id = ? AND store_id = ?').get(orderId, storeId) as { despacho_proveedor: string } | undefined;
+  return o?.despacho_proveedor === 'bodega_df' ? { cuenta: CUENTA_DF, c: cfgSkydropxDF() } : { cuenta: storeId, c: cfgSkydropx(storeId) };
+}
+
 /** Configuración guardada de la tienda (con el secreto descifrado), o null si no está conectada. */
 export function cfgSkydropx(storeId: string): CfgSky | null {
+  if (storeId === CUENTA_DF) return cfgSkydropxDF();
   const row = db.prepare("SELECT config FROM store_integrations WHERE store_id = ? AND tipo = 'skydropx'").get(storeId) as { config: string } | undefined;
   if (!row) return null;
   const c = pj<Partial<CfgSky>>(row.config, {});
@@ -402,9 +431,9 @@ export function csvVariantesSkydropx(storeId: string): string {
  * Productos del pedido para la guía: cada ítem con su variante y, si está vinculada,
  * el producto de Skydropx (product_id). Si el pedido no tiene ítems, va uno con el total.
  */
-function productosSky(storeId: string, o: Fila, contenido: string): Fila[] {
+function productosSky(storeId: string, o: Fila, contenido: string, sinVinculos = false): Fila[] {
   const items = db.prepare("SELECT nombre, qty, precio, COALESCE(product_id,'') product_id, COALESCE(variant_id,'') variant_id FROM order_items WHERE order_id = ?").all(txt(o.id)) as { nombre: string; qty: number; precio: number; product_id: string; variant_id: string }[];
-  const vars = items.length ? variantesParaSkydropx(storeId) : [];
+  const vars = items.length && !sinVinculos ? variantesParaSkydropx(storeId) : [];
   const lista = items.filter((x) => x.qty > 0).map((x, i) => {
     const v = varianteDelItem(x, vars);
     const base: Fila = { name: (v?.skyNombre || String(x.nombre || contenido)).replace(/\s+/g, ' ').trim().slice(0, 60), sku: v?.sku || `DF-${i + 1}`, quantity: Math.round(x.qty), price: Math.max(1, Math.round(num(x.precio))) };
@@ -450,10 +479,12 @@ async function origenEnvio(storeId: string, c: CfgSky, proveedorId: string): Pro
   return f ? { error: f } : { origen, proveedorId: p.id };
 }
 
-export async function cotizarSkydropx(storeId: string, orderId: string, opts: { recaudo: boolean; proveedorId?: string }): Promise<{ ciudad: string; disponibles: TarifaSky[]; noDisponibles: { nombre: string; motivo: string }[]; cotizacion: string } | { error: string; elegir?: true }> {
-  const c = cfgSkydropx(storeId);
-  if (!c) return { error: 'Conecta Skydropx primero en Integraciones.' };
-  const og = await origenEnvio(storeId, c, txt(opts.proveedorId));
+export async function cotizarSkydropx(storeId: string, orderId: string, opts: { recaudo: boolean; proveedorId?: string; df?: OpcionesDF }): Promise<{ ciudad: string; disponibles: TarifaSky[]; noDisponibles: { nombre: string; motivo: string }[]; cotizacion: string } | { error: string; elegir?: true }> {
+  const cuenta = opts.df ? CUENTA_DF : storeId;
+  const c = cfgSkydropx(cuenta);
+  if (!c) return { error: opts.df ? 'La cuenta de Skydropx de DealFlow no está configurada (variables SKYDROPX_DF_* en Railway).' : 'Conecta Skydropx primero en Integraciones.' };
+  const faltaDF = opts.df ? faltaOrigen(opts.df.origen, true) : '';
+  const og = opts.df ? (faltaDF ? { error: 'Bodega DealFlow: faltan datos de la bodega del proveedor (Administración → Proveedores → Bodega DealFlow).' } : { origen: opts.df.origen, proveedorId: '' }) : await origenEnvio(storeId, c, txt(opts.proveedorId));
   if ('error' in og) return og;
   const o = db.prepare('SELECT * FROM orders WHERE id = ? AND store_id = ?').get(orderId, storeId) as Fila | undefined;
   if (!o) return { error: 'Pedido no encontrado.' };
@@ -462,8 +493,8 @@ export async function cotizarSkydropx(storeId: string, orderId: string, opts: { 
   const hacia = codigoDane(txt(o.departamento), txt(o.ciudad), storeId);
   if ('error' in hacia) return hacia;
   const total = Math.max(num(o.total), 1000);
-  const p = c.paquete;
-  const r = await sky(storeId, c, 'POST', '/api/v1/quotations', {
+  const p = opts.df ? opts.df.paquete : c.paquete;
+  const r = await sky(cuenta, c, 'POST', '/api/v1/quotations', {
     quotation: {
       address_from: { country_code: 'CO', postal_code: desde.codigo, area_level1: desde.depto, area_level2: desde.ciudad, area_level3: desde.ciudad },
       address_to: { country_code: 'CO', postal_code: hacia.codigo, area_level1: hacia.depto, area_level2: hacia.ciudad, area_level3: barrioSky(o, hacia) },
@@ -479,7 +510,7 @@ export async function cotizarSkydropx(storeId: string, orderId: string, opts: { 
   let q = r.body;
   for (let i = 0; i < 15 && !q.is_completed; i++) {
     await espera(i < 3 ? 1200 : 2000);
-    const g = await sky(storeId, c, 'GET', `/api/v1/quotations/${encodeURIComponent(id)}`);
+    const g = await sky(cuenta, c, 'GET', `/api/v1/quotations/${encodeURIComponent(id)}`);
     if (g.ok) q = g.body;
   }
   const rates = (Array.isArray(q.rates) ? q.rates : []) as Fila[];
@@ -505,11 +536,13 @@ function barrioSky(o: Fila, u: { ciudad: string; localidad?: string }): string {
 const corta = (s: string, n: number) => String(s || '').replace(/\s+/g, ' ').trim().slice(0, n);
 const soloDigitos = (s: string) => String(s || '').replace(/\D/g, '').replace(/^57(?=3\d{9}$)/, '');
 
-export async function crearEnvioSkydropx(storeId: string, orderId: string, tarifa: { id: string; transportadora: string }, proveedorId = ''): Promise<{ ok: true; envioId: string; guia: string } | { error: string }> {
-  const c = cfgSkydropx(storeId);
-  if (!c) return { error: 'Conecta Skydropx primero en Integraciones.' };
-  const ori = await origenEnvio(storeId, c, proveedorId);
+export async function crearEnvioSkydropx(storeId: string, orderId: string, tarifa: { id: string; transportadora: string }, proveedorId = '', df?: OpcionesDF): Promise<{ ok: true; envioId: string; guia: string } | { error: string }> {
+  const cuenta = df ? CUENTA_DF : storeId;
+  const c = cfgSkydropx(cuenta);
+  if (!c) return { error: df ? 'La cuenta de Skydropx de DealFlow no está configurada (variables SKYDROPX_DF_* en Railway).' : 'Conecta Skydropx primero en Integraciones.' };
+  const ori = df ? (faltaOrigen(df.origen, true) ? { error: 'Bodega DealFlow: faltan datos de la bodega del proveedor.' } : { origen: df.origen, proveedorId: '' }) : await origenEnvio(storeId, c, proveedorId);
   if ('error' in ori) return ori;
+  const paquete = df ? df.paquete : c.paquete;
   const o = db.prepare('SELECT * FROM orders WHERE id = ? AND store_id = ?').get(orderId, storeId) as Fila | undefined;
   if (!o) return { error: 'Pedido no encontrado.' };
   if (!tarifa?.id) return { error: 'Elige una transportadora.' };
@@ -528,13 +561,13 @@ export async function crearEnvioSkydropx(storeId: string, orderId: string, tarif
   const ubic = (u: { codigo: string; depto: string; ciudad: string }, barrio: string) => ({
     country_code: 'CO', postal_code: u.codigo, area_level1: u.depto, area_level2: u.ciudad, area_level3: corta(barrio, 60) || u.ciudad,
   });
-  const r = await sky(storeId, c, 'POST', '/api/v1/shipments', {
+  const r = await sky(cuenta, c, 'POST', '/api/v1/shipments', {
     shipment: {
       rate_id: tarifa.id, printing_format: 'standard',
       address_from: { ...ubic(desde, ''), street1: corta(og.direccion, 100), name: corta(og.nombre, 30), company: corta(og.empresa || og.nombre, 60), phone: soloDigitos(og.telefono), email: og.email, reference: corta(og.referencia || og.direccion, 30), ...(og.nit ? { tax_id_number: og.nit } : {}) },
       address_to: { ...ubic(hacia, barrioSky(o, hacia)), street1: dir, name: corta(nombreCliente, 30), company: corta(nombreCliente, 60), phone: tel, email: og.email, reference: corta(txt(o.barrio) || txt(o.nota) || dir, 40) },
       // package_type es obligatorio para Skydropx: '4G' = caja de cartón (el empaque normal de una tienda).
-      packages: [{ package_number: '1', package_protected: false, package_type: '4G', package_content: corta(c.paquete.contenido, 60), products: productosSky(storeId, o, c.paquete.contenido) }],
+      packages: [{ package_number: '1', package_protected: false, package_type: '4G', package_content: corta(paquete.contenido, 60), products: productosSky(storeId, o, paquete.contenido, !!df) }],
     },
   });
   if (!r.ok) return { error: `Skydropx no creó la guía: ${errorSky(r.body, r.http)}` };
@@ -542,9 +575,9 @@ export async function crearEnvioSkydropx(storeId: string, orderId: string, tarif
   const envioId = txt(data.id);
   if (!envioId) return { error: 'Skydropx no devolvió el envío.' };
   const datos = leerEnvio(r.body);
-  db.prepare("UPDATE orders SET skydropx_envio = ?, despacho_proveedor = 'skydropx', transportadora = ?, woo_id = '', estado_woo = ?, dropi_order_id = '', guia = ?, guia_url = ?, bodega_id = ?, guia_proveedor = '' WHERE id = ?")
-    .run(envioId, corta(datos.transportadora || tarifa.transportadora, 60), datos.estadoTexto || 'Creando guía', datos.guia, datos.labelUrl, ori.proveedorId, orderId);
-  registrarLog(storeId, 'info', 'despacho', `DF-${txt(o.numero)} enviado a Skydropx por ${tarifa.transportadora}${datos.guia ? ` · guía ${datos.guia}` : ''}.`);
+  db.prepare("UPDATE orders SET skydropx_envio = ?, despacho_proveedor = ?, transportadora = ?, woo_id = '', estado_woo = ?, dropi_order_id = '', guia = ?, guia_url = ?, bodega_id = ?, guia_proveedor = '' WHERE id = ?")
+    .run(envioId, df ? 'bodega_df' : 'skydropx', corta(datos.transportadora || tarifa.transportadora, 60), datos.estadoTexto || 'Creando guía', datos.guia, datos.labelUrl, ori.proveedorId, orderId);
+  registrarLog(storeId, 'info', 'despacho', `DF-${txt(o.numero)} enviado ${df ? 'por la Bodega DealFlow' : 'a Skydropx'} por ${tarifa.transportadora}${datos.guia ? ` · guía ${datos.guia}` : ''}.`);
   // La guía a veces tarda unos segundos: si no vino en la respuesta, se pregunta enseguida.
   if (!datos.guia) { await espera(2500); await consultarEnvioSkydropx(storeId, orderId).catch(() => null); }
   else await aplicarEstado(storeId, orderId, datos);
@@ -583,7 +616,7 @@ function leerEnvio(body: Fila): DatosEnvio {
 const intentoAviso = new Map<string, number>();
 /** Guarda guía/PDF/estado en el pedido, mueve el estado y avisa la guía al cliente la primera vez. */
 async function aplicarEstado(storeId: string, orderId: string, d: DatosEnvio): Promise<void> {
-  const o = db.prepare('SELECT id, numero, estado, guia, guia_url, guia_avisada, tel, COALESCE(estado_woo,\'\') estado_woo, bodega_id, guia_proveedor FROM orders WHERE id = ? AND store_id = ?').get(orderId, storeId) as Fila | undefined;
+  const o = db.prepare('SELECT id, numero, estado, guia, guia_url, guia_avisada, tel, COALESCE(estado_woo,\'\') estado_woo, bodega_id, guia_proveedor, despacho_proveedor FROM orders WHERE id = ? AND store_id = ?').get(orderId, storeId) as Fila | undefined;
   if (!o) return;
   const cambios: string[] = []; const params: unknown[] = [];
   const guiaNueva = d.guia && d.guia !== txt(o.guia) ? d.guia : '';
@@ -599,6 +632,10 @@ async function aplicarEstado(storeId: string, orderId: string, d: DatosEnvio): P
   if (destino) { cambios.push('estado = ?'); params.push(destino); }
   if (cambios.length) { params.push(orderId); db.prepare(`UPDATE orders SET ${cambios.join(', ')} WHERE id = ?`).run(...params); }
   if (destino === 'Devuelto') void import('./effiExtras.js').then((m) => m.alQuedarDevuelto(storeId, orderId)).catch(() => {});
+  // Bodega DealFlow: liquidación en la billetera de la tienda (entregado / devuelto / envío cancelado).
+  if (txt(o.despacho_proveedor) === 'bodega_df' && (destino || d.status === 'canceled')) {
+    void import('./bodegaDF.js').then((m) => m.alCambiarEstadoDF(storeId, orderId, destino || '', d.status)).catch((e) => console.error('[bodega-df] liquidación', e));
+  }
   if (d.error && (d.flujo === 'failed' || d.flujo === 'error' || d.flujo === 'cancelled')) {
     trazar(storeId, orderId, { etapa: 'despacho', nivel: 'error', titulo: 'Skydropx no pudo generar la guía', detalle: d.error });
   }
@@ -620,11 +657,11 @@ async function aplicarEstado(storeId: string, orderId: string, d: DatosEnvio): P
 
 /** Consulta un envío en Skydropx (botón «Actualizar» y ciclo de despachos). */
 export async function consultarEnvioSkydropx(storeId: string, orderId: string): Promise<{ estado: string; guia: string } | { error: string }> {
-  const c = cfgSkydropx(storeId);
+  const { cuenta, c } = cuentaDelPedido(storeId, orderId);
   if (!c) return { error: 'Skydropx no está conectado.' };
   const o = db.prepare('SELECT skydropx_envio FROM orders WHERE id = ? AND store_id = ?').get(orderId, storeId) as { skydropx_envio: string } | undefined;
   if (!o?.skydropx_envio) return { error: 'Este pedido no se ha enviado por Skydropx.' };
-  const r = await sky(storeId, c, 'GET', `/api/v1/shipments/${encodeURIComponent(o.skydropx_envio)}`);
+  const r = await sky(cuenta, c, 'GET', `/api/v1/shipments/${encodeURIComponent(o.skydropx_envio)}`);
   if (!r.ok) return { error: `No pudimos leer el envío en Skydropx: ${errorSky(r.body, r.http)}` };
   const d = leerEnvio(r.body);
   await aplicarEstado(storeId, orderId, d);
@@ -633,27 +670,33 @@ export async function consultarEnvioSkydropx(storeId: string, orderId: string): 
 
 /** Cancela el envío en Skydropx y deja el pedido listo para volver a despacharlo. */
 export async function cancelarEnvioSkydropx(storeId: string, orderId: string, motivo: string): Promise<{ ok: true } | { error: string }> {
-  const c = cfgSkydropx(storeId);
+  const { cuenta, c } = cuentaDelPedido(storeId, orderId);
+  const eraDF = cuenta === CUENTA_DF;
   if (!c) return { error: 'Skydropx no está conectado.' };
   const o = db.prepare('SELECT skydropx_envio, numero FROM orders WHERE id = ? AND store_id = ?').get(orderId, storeId) as { skydropx_envio: string; numero: number } | undefined;
   if (!o?.skydropx_envio) return { error: 'Este pedido no tiene envío en Skydropx.' };
-  const r = await sky(storeId, c, 'POST', `/api/v1/shipments/${encodeURIComponent(o.skydropx_envio)}/cancellations`, { reason: corta(motivo || 'Corregir datos del pedido', 120), shipment_id: o.skydropx_envio });
+  const r = await sky(cuenta, c, 'POST', `/api/v1/shipments/${encodeURIComponent(o.skydropx_envio)}/cancellations`, { reason: corta(motivo || 'Corregir datos del pedido', 120), shipment_id: o.skydropx_envio });
   if (!r.ok) return { error: r.http === 422 ? 'Skydropx no deja cancelar este envío (puede que la transportadora ya lo haya recogido).' : `Skydropx no canceló el envío: ${errorSky(r.body, r.http)}` };
   db.prepare("UPDATE orders SET skydropx_envio = '', despacho_proveedor = '', guia = NULL, guia_url = '', guia_avisada = 0, estado_woo = '', guia_proveedor = '' WHERE id = ?").run(orderId);
   trazar(storeId, orderId, { etapa: 'despacho', nivel: 'warn', titulo: 'Envío cancelado en Skydropx', detalle: motivo });
+  if (eraDF) void import('./bodegaDF.js').then((m) => m.alCancelarEnvioDF(storeId, orderId, motivo)).catch((e) => console.error('[bodega-df] cancelación', e));
   registrarLog(storeId, 'info', 'despacho', `DF-${o.numero}: envío cancelado en Skydropx (${motivo}).`);
   return { ok: true };
 }
 
 /** Webhook de Skydropx (evento de un paquete): busca el pedido por el envío y aplica el estado. */
-export async function procesarWebhookSkydropx(storeId: string, body: Fila): Promise<void> {
+export async function procesarWebhookSkydropx(storeIdCuenta: string | null, body: Fila): Promise<void> {
   const data = (body?.data || {}) as Fila;
   const at = (data.attributes || {}) as Fila;
   const rel = (data.relationships || {}) as Fila;
   const envioId = txt(((rel.shipment as Fila | undefined)?.data as Fila | undefined)?.id || (data.type === 'shipments' ? data.id : ''));
   if (!envioId) return;
-  const o = db.prepare('SELECT id FROM orders WHERE store_id = ? AND skydropx_envio = ?').get(storeId, envioId) as { id: string } | undefined;
+  // Cuenta de la tienda: se busca en sus pedidos. Cuenta de DealFlow (null): en los de la bodega, de cualquier tienda.
+  const o = (storeIdCuenta
+    ? db.prepare('SELECT id, store_id FROM orders WHERE store_id = ? AND skydropx_envio = ?').get(storeIdCuenta, envioId)
+    : db.prepare("SELECT id, store_id FROM orders WHERE skydropx_envio = ? AND despacho_proveedor = 'bodega_df'").get(envioId)) as { id: string; store_id: string } | undefined;
   if (!o) return;
+  const storeId = o.store_id;
   const status = txt(at.status || at.tracking_status).toLowerCase();
   await aplicarEstado(storeId, o.id, {
     guia: txt(at.tracking_number).trim(), labelUrl: txt(at.label_url), transportadora: '', status, flujo: '',

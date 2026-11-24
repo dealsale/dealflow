@@ -105,7 +105,6 @@ export function crearProveedor(b: Fila): { proveedor: Proveedor } | { error: str
   if (!nombre) return { error: 'Escribe el nombre del proveedor.' };
   if (!emailValido(email)) return { error: 'Escribe un correo válido.' };
   if (password.length < 6) return { error: 'La contraseña debe tener al menos 6 caracteres.' };
-  if (!convenios.length) return { error: 'Agrega al menos un código de convenio.' };
   if (db.prepare('SELECT 1 FROM proveedor_cuentas WHERE email = ?').get(email)) return { error: 'Ya hay un proveedor con ese correo.' };
   const id = randomUUID();
   db.prepare('INSERT INTO proveedor_cuentas (id, nombre, email, pass_hash, convenios) VALUES (?,?,?,?,?)').run(id, nombre, email, hashPassword(password), JSON.stringify(convenios));
@@ -126,7 +125,7 @@ export function editarProveedor(id: string, b: Fila): { proveedor: Proveedor } |
     if (String(b.password).length < 6) return { error: 'La contraseña debe tener al menos 6 caracteres.' };
     sets.push('pass_hash = ?'); vals.push(hashPassword(String(b.password)));
   }
-  if ('convenios' in b) { const c = limpiarConvenios(b.convenios); if (!c.length) return { error: 'Agrega al menos un código de convenio.' }; sets.push('convenios = ?'); vals.push(JSON.stringify(c)); }
+  if ('convenios' in b) { const c = limpiarConvenios(b.convenios); sets.push('convenios = ?'); vals.push(JSON.stringify(c)); }
   if ('activo' in b) { sets.push('activo = ?'); vals.push(b.activo ? 1 : 0); }
   if (sets.length) db.prepare(`UPDATE proveedor_cuentas SET ${sets.join(', ')} WHERE id = ?`).run(...vals, id);
   return { proveedor: aProveedor(db.prepare('SELECT * FROM proveedor_cuentas WHERE id = ?').get(id) as Fila) };
@@ -172,8 +171,8 @@ const enLista = (n: number) => Array.from({ length: n }, () => '?').join(',');
  * (fechas de Colombia). Un pedido que ya salió a Effi cuenta por el convenio con el que
  * salió; uno que aún no sale, por el de sus productos (así ve lo que viene en camino).
  */
-function pedidosDe(convenios: string[], desde: string, hasta: string, soloId = '') {
-  if (!convenios.length) return [];
+function pedidosDe(convenios: string[], desde: string, hasta: string, soloId = '', provId = '') {
+  if (!convenios.length && !provId) return [];
   const set = new Set(convenios);
   const desdeUtc = `${desde} 05:00:00`;
   const hastaUtc = new Date(new Date(`${hasta}T05:00:00Z`).getTime() + 86400e3).toISOString().replace('T', ' ').slice(0, 19);
@@ -182,10 +181,15 @@ function pedidosDe(convenios: string[], desde: string, hasta: string, soloId = '
   const filtroId = soloId ? ' AND o.id = ?' : '';
   const extra = soloId ? [soloId] : [];
   // 1) Los que ya salieron a Effi con alguno de sus convenios.
-  const filas = db.prepare(`${SEL} WHERE o.effi_convenio IN (${enLista(convenios.length)}) AND o.created_at >= ? AND o.created_at < ?${filtroId} LIMIT 20000`)
-    .all(...convenios, desdeUtc, hastaUtc, ...extra) as Fila[];
+  const filas = convenios.length ? db.prepare(`${SEL} WHERE o.effi_convenio IN (${enLista(convenios.length)}) AND o.created_at >= ? AND o.created_at < ?${filtroId} LIMIT 20000`)
+    .all(...convenios, desdeUtc, hastaUtc, ...extra) as Fila[] : [];
+  // 1b) Bodega DealFlow: los que DealFlow despachó con recogida en su bodega.
+  if (provId) {
+    const ya = new Set(filas.map((o) => txt(o.id)));
+    for (const o of db.prepare(`${SEL} WHERE o.df_proveedor = ? AND o.created_at >= ? AND o.created_at < ?${filtroId} LIMIT 20000`).all(provId, desdeUtc, hastaUtc, ...extra) as Fila[]) if (!ya.has(txt(o.id))) filas.push(o);
+  }
   // 2) Los que aún no salen, en las tiendas que venden productos de esos convenios.
-  const tiendas = (db.prepare(`SELECT store_id FROM effi_convenio_producto WHERE convenio IN (${enLista(convenios.length)})
+  const tiendas = !convenios.length ? [] : (db.prepare(`SELECT store_id FROM effi_convenio_producto WHERE convenio IN (${enLista(convenios.length)})
       UNION SELECT store_id FROM products WHERE effi_convenio IN (${enLista(convenios.length)})`).all(...convenios, ...convenios) as { store_id: string }[]).map((r) => r.store_id);
   const itemsDe = db.prepare('SELECT qty, nombre, precio, product_id FROM order_items WHERE order_id = ?');
   const conv = new Map<string, string>();
@@ -205,10 +209,15 @@ function pedidosDe(convenios: string[], desde: string, hasta: string, soloId = '
   return filas.map((o) => {
     const items = itemsDe.all(txt(o.id)) as Fila[];
     const mov = ult.get(txt(o.id)) as Fila | undefined;
+    const bodegaDF = !!provId && txt(o.df_proveedor) === provId;
+    const cobroDF = bodegaDF ? pj<{ producto?: number; servicioProveedor?: number }>(txt(o.df_cobro), {}) : {};
+    const esc = bodegaDF && txt(o.df_escalado) ? pj<Fila>(txt(o.df_escalado), {}) : null;
     return {
+      bodegaDF, recogido: bodegaDF ? txt(o.df_recogido_at) : '', costoProveedor: Number(cobroDF.producto) || 0, tarifaGuia: txt(o.df_estado) === 'cancelado' ? 0 : Number(cobroDF.servicioProveedor) || 0,
+      escalado: esc ? { nota: txt(esc.nota), at: txt(esc.at), respuesta: txt(esc.respuesta), resuelto: txt(esc.resuelto) } : null,
       id: txt(o.id), codigo: 'DF-' + txt(o.numero), numero: Number(o.numero), fecha: txt(o.created_at), dia: fechaCO(txt(o.created_at)), tienda: txt(o.tienda),
       cliente: txt(o.cliente), tel: txt(o.tel), ciudad: txt(o.ciudad), departamento: txt(o.departamento), direccion: txt(o.direccion),
-      estado: txt(o.estado), estadoTransportadora: txt(o.estado_woo), etapa: etapaDe(o, Number(o.novedad_activa) > 0), convenio: conv.get(txt(o.id)) || txt(o.effi_convenio),
+      estado: txt(o.estado), estadoTransportadora: txt(o.estado_woo), etapa: etapaDe(o, Number(o.novedad_activa) > 0 || txt(o.estado) === 'Novedad'), convenio: conv.get(txt(o.id)) || txt(o.effi_convenio) || (txt(o.df_proveedor) === provId && provId ? 'Bodega DealFlow' : ''),
       guia: txt(o.guia), guiaUrl: txt(o.guia_url), transportadora: txt(o.guia) ? txt(o.transportadora) : '', remision: txt(o.effi_remision),
       total: Number(o.total) || 0,
       items: items.map((i) => ({ qty: Number(i.qty) || 0, nombre: txt(i.nombre) })),
@@ -230,8 +239,9 @@ const ETAPAS: { id: Etapa; label: string; color: string }[] = [
   { id: 'cancelado', label: 'Cancelado', color: '#64748B' },
 ];
 
-export function tableroProveedor(convenios: string[], desde: string, hasta: string) {
-  const pedidos = pedidosDe(convenios, desde, hasta);
+export function tableroProveedor(convenios: string[], desde: string, hasta: string, provId = '') {
+  const pedidos = pedidosDe(convenios, desde, hasta, '', provId);
+  const df = pedidos.filter((p) => p.bodegaDF);
   const cuenta = (e: Etapa) => pedidos.filter((p) => p.etapa === e).length;
   const entregados = cuenta('entregado'); const devueltos = cuenta('devuelto');
   const activos = pedidos.filter((p) => p.etapa !== 'cancelado');
@@ -258,6 +268,12 @@ export function tableroProveedor(convenios: string[], desde: string, hasta: stri
       valorEntregado: pedidos.filter((p) => p.etapa === 'entregado').reduce((a, p) => a + p.total, 0),
       efectividad: entregados + devueltos ? Math.round((entregados / (entregados + devueltos)) * 1000) / 10 : null,
       tiendas: new Set(activos.map((p) => p.tienda)).size,
+      // Bodega DealFlow: guías por imprimir/entregar y lo que DealFlow le debe por lo entregado.
+      porImprimir: df.filter((p) => p.guia && !p.recogido && p.etapa !== 'cancelado').length,
+      escalados: df.filter((p) => p.escalado && !p.escalado.resuelto).length,
+      porCobrar: df.filter((p) => p.etapa === 'entregado').reduce((a, p) => a + p.costoProveedor, 0) - df.reduce((a, p) => a + p.tarifaGuia, 0),
+      tarifasGuias: df.reduce((a, p) => a + p.tarifaGuia, 0),
+      bodegaDF: df.length,
     },
     serie: [...porDia].map(([fecha, valor]) => ({ fecha, valor })),
     porEtapa: ETAPAS.map((e) => ({ ...e, valor: cuenta(e.id) })),
@@ -272,11 +288,11 @@ export function tableroProveedor(convenios: string[], desde: string, hasta: stri
 // llamadas a las APIs ni los detalles internos de la tienda.
 const ETAPAS_TRAZA = ['pedido', 'estado', 'despacho', 'guia'];
 
-export function pedidoProveedor(convenios: string[], orderId: string) {
+export function pedidoProveedor(convenios: string[], orderId: string, provId = '') {
   const o = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId) as Fila | undefined;
   if (!o) return null;
   const dia = fechaCO(txt(o.created_at));
-  const p = pedidosDe(convenios, dia, dia, orderId)[0];
+  const p = pedidosDe(convenios, dia, dia, orderId, provId)[0];
   if (!p) return null;
   const recorrido = (db.prepare('SELECT fecha, estado, estado_global, observacion, foto FROM guia_historial WHERE order_id = ? ORDER BY fecha DESC').all(orderId) as Fila[])
     .map((h) => ({ fecha: txt(h.fecha), estado: txt(h.estado) || txt(h.estado_global), observacion: txt(h.observacion), foto: txt(h.foto) }));
@@ -349,7 +365,8 @@ proveedorApi.use((req, res, next) => {
 
 proveedorApi.get('/yo', (_req, res) => {
   const c = res.locals.prov as Fila & { _adm?: boolean };
-  res.json({ nombre: txt(c.nombre), email: txt(c.email), convenios: pj<string[]>(txt(c.convenios), []), comoAdmin: !!c._adm });
+  const df = (db.prepare("SELECT COUNT(*) n FROM library_products WHERE df_activo = 1 AND df_proveedor = ?").get(txt(c.id)) as { n: number } | undefined)?.n || 0;
+  res.json({ nombre: txt(c.nombre), email: txt(c.email), convenios: pj<string[]>(txt(c.convenios), []), comoAdmin: !!c._adm, bodegaDF: df > 0 || !!db.prepare('SELECT 1 FROM orders WHERE df_proveedor = ? LIMIT 1').get(txt(c.id)) });
 });
 
 proveedorApi.get('/tablero', (req, res) => {
@@ -360,12 +377,65 @@ proveedorApi.get('/tablero', (req, res) => {
   // Máximo un año por consulta.
   const minimo = new Date(new Date(`${hasta}T12:00:00Z`).getTime() - 366 * 86400e3).toISOString().slice(0, 10);
   if (desde < minimo) desde = minimo;
-  res.json(tableroProveedor(pj<string[]>(txt(c.convenios), []), desde, hasta));
+  res.json(tableroProveedor(pj<string[]>(txt(c.convenios), []), desde, hasta, txt(c.id)));
 });
 
 proveedorApi.get('/pedido/:id', (req, res) => {
   const c = res.locals.prov as Fila;
-  const p = pedidoProveedor(pj<string[]>(txt(c.convenios), []), String(req.params.id));
+  const p = pedidoProveedor(pj<string[]>(txt(c.convenios), []), String(req.params.id), txt(c.id));
   if (!p) return res.status(404).json({ error: 'Pedido no encontrado.' });
   res.json(p);
+});
+
+// ── Bodega DealFlow: acciones del proveedor ──────────────────────────────────
+// Marca paquetes como entregados a la transportadora.
+proveedorApi.post('/recogidos', async (req, res) => {
+  const c = res.locals.prov as Fila & { _adm?: boolean };
+  if (c._adm) return res.status(403).json({ error: 'En la vista de administrador no se marcan entregas.' });
+  const ids = Array.isArray(req.body?.ids) ? (req.body.ids as unknown[]).map((x) => String(x)) : [];
+  const { marcarRecogidosDF } = await import('./bodegaDF.js');
+  res.json({ marcados: marcarRecogidosDF(txt(c.id), ids) });
+});
+// Escala una novedad a la tienda (ella habla con el cliente y la resuelve).
+proveedorApi.post('/pedido/:id/escalar', async (req, res) => {
+  const c = res.locals.prov as Fila & { _adm?: boolean };
+  if (c._adm) return res.status(403).json({ error: 'En la vista de administrador no se escalan novedades.' });
+  const { escalarNovedadDF } = await import('./bodegaDF.js');
+  const r = escalarNovedadDF(txt(c.id), String(req.params.id), String(req.body?.nota || ''), txt(c.nombre));
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
+});
+// Varias guías en UN PDF para imprimirlas de una vez (pdfunite, de poppler-utils, viene en el servidor).
+proveedorApi.get('/guias.pdf', async (req, res) => {
+  const c = res.locals.prov as Fila;
+  const ids = String(req.query.ids || '').split(',').map((x) => x.trim()).filter(Boolean).slice(0, 60);
+  if (!ids.length) return res.status(400).json({ error: 'Elige las guías a imprimir.' });
+  const filas = ids.map((id) => db.prepare("SELECT guia_url FROM orders WHERE id = ? AND df_proveedor = ? AND COALESCE(guia_url,'') != ''").get(id, txt(c.id)) as { guia_url: string } | undefined).filter(Boolean) as { guia_url: string }[];
+  if (!filas.length) return res.status(404).json({ error: 'Esas guías todavía no tienen PDF.' });
+  const { mkdtempSync, writeFileSync, readFileSync, rmSync, existsSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const path = await import('node:path');
+  const { spawnSync } = await import('node:child_process');
+  let dir = '';
+  try {
+    dir = mkdtempSync(path.join(tmpdir(), 'df-guias-'));
+    const archivos: string[] = [];
+    for (const [i, f] of filas.entries()) {
+      const r = await fetch(f.guia_url, { signal: AbortSignal.timeout(20000) }).catch(() => null);
+      if (!r?.ok) continue;
+      const buf = Buffer.from(await r.arrayBuffer());
+      if (buf.subarray(0, 4).toString('latin1') !== '%PDF') continue;
+      const a = path.join(dir, `g${String(i).padStart(3, '0')}.pdf`); writeFileSync(a, buf); archivos.push(a);
+    }
+    if (!archivos.length) return res.status(502).json({ error: 'No pudimos descargar las guías. Ábrelas una por una.' });
+    let salida = archivos[0];
+    if (archivos.length > 1) {
+      salida = path.join(dir, 'todas.pdf');
+      const u = spawnSync('pdfunite', [...archivos, salida], { timeout: 60000 });
+      if (u.status !== 0 || !existsSync(salida)) return res.status(501).json({ error: 'No se pudieron unir las guías en este servidor. Ábrelas una por una.' });
+    }
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="guias-${new Date().toISOString().slice(0, 10)}.pdf"`);
+    res.send(readFileSync(salida));
+  } finally { if (dir) try { rmSync(dir, { recursive: true, force: true }); } catch { /* nada */ } }
 });

@@ -1,6 +1,7 @@
 import { mensajesDe as mensajesInicialesDe, normalizarMensajes, principal } from './mensajesIniciales.js';
 import express, { Router } from 'express';
 import { rutasEscritorio } from './escritorioRutas.js';
+import { rutasBodegaDF } from './bodegaDFRutas.js';
 import type { Request as ExRequest, Response as ExResponse } from 'express';
 import { trazar, conPedido } from './trazabilidad.js';
 import { requirePermiso, permisosDe, PERMISOS, rolesTienda, guardarRol, borrarRol, nombreRol } from './roles.js';
@@ -35,6 +36,7 @@ import { guardarPermisos as guardarPermisosPlantillas, permisosPlantillas as per
 export const api = proteger(Router());
 // App de escritorio «DealFlow Soporte» (acceso a todo el computador de la tienda).
 rutasEscritorio(api);
+rutasBodegaDF(api);
 // Registro de accesos del equipo (administradores y soporte dentro de una tienda).
 api.use(registrarAccesosEquipo);
 // Al crear/editar productos o variantes (o marcarlos de Effi), se vinculan solos con Effi.
@@ -3852,6 +3854,40 @@ api.post('/leads/:id/optin', requireAuth, requireStore, (req, res) => {
 
 // Extrae (con IA + el resumen del chat) el pedido de una conversación para
 // REVISAR y completar un pedido existente. No escribe nada.
+// «Completar pedido desde el chat»: el resumen más reciente que vio el cliente y su pedido más
+// reciente (sin IA, al instante), para confirmarlo con un botón.
+api.get('/leads/:id/pedido-reciente', requireAuth, requireStore, async (req, res) => {
+  const sid = req.user!.storeId!;
+  const l = db.prepare('SELECT id, tel, wa_id FROM leads WHERE id = ? AND store_id = ?').get(req.params.id, sid) as { id: string; tel: string; wa_id: string } | undefined;
+  if (!l) return res.status(404).json({ error: 'Chat no encontrado.' });
+  const { esResumenDelAsistente } = await import('./shopifyPedidos.js');
+  const msgs = db.prepare("SELECT texto, created_at FROM messages WHERE lead_id = ? AND de != 'cliente' AND TRIM(COALESCE(texto,'')) != '' ORDER BY created_at DESC, rowid DESC LIMIT 120").all(l.id) as { texto: string; created_at: string }[];
+  const resumen = msgs.find((m) => /(resumen de tu pedido|resumen del pedido|order summary)/i.test(m.texto) || esResumenDelAsistente(m.texto)) || null;
+  const d10 = [l.tel, l.wa_id].map((t) => String(t || '').replace(/\D/g, '').slice(-10)).find((t) => t.length === 10) || '';
+  const o = db.prepare(`SELECT * FROM orders WHERE store_id = ? AND (lead_id = ? ${d10 ? "OR replace(replace(replace(replace(tel,'+',''),' ',''),'-',''),'(','') LIKE ?" : ''})
+      ORDER BY created_at DESC LIMIT 1`).get(sid, l.id, ...(d10 ? ['%' + d10] : [])) as Record<string, unknown> | undefined;
+  const items = o ? db.prepare('SELECT qty, nombre, precio FROM order_items WHERE order_id = ?').all(String(o.id)) as { qty: number; nombre: string; precio: number }[] : [];
+  res.json({
+    resumen: resumen ? { texto: resumen.texto, fecha: resumen.created_at } : null,
+    pedido: o ? {
+      rowId: String(o.id), id: 'DF-' + o.numero, estado: String(o.estado || ''), confirmacion: String(o.confirmacion || ''), total: Number(o.total) || 0,
+      cliente: String(o.cliente || ''), tel: String(o.tel || ''), ciudad: String(o.ciudad || ''), departamento: String(o.departamento || ''), direccion: String(o.direccion || ''),
+      guia: String(o.guia || ''), fecha: String(o.created_at || ''), items,
+    } : null,
+  });
+});
+// Confirma a mano un pedido (como si el cliente hubiera dicho «Sí»): queda Confirmado y sale el despacho automático.
+api.post('/orders/:rowId/confirmar-chat', requireAuth, requireStore, async (req, res) => {
+  const sid = req.user!.storeId!;
+  const o = db.prepare('SELECT id, numero, estado, confirmacion FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, sid) as { id: string; numero: number; estado: string; confirmacion: string } | undefined;
+  if (!o) return res.status(404).json({ error: 'Pedido no encontrado.' });
+  if (['Cancelado', 'Entregado', 'Devuelto'].includes(o.estado)) return res.status(400).json({ error: `El pedido está ${o.estado.toLowerCase()}.` });
+  if (o.confirmacion === 'si') return res.json({ ok: true, yaEstaba: true });
+  const { confirmarPedidoCliente } = await import('./shopifyPedidos.js');
+  const ok = await confirmarPedidoCliente(sid, o.id, `Confirmado desde el chat por ${req.user!.nombre || req.user!.email}`, { aviso: req.body?.avisar !== false, titulo: `Pedido confirmado a mano desde el chat (${req.user!.nombre || req.user!.email})` });
+  res.json({ ok: true, yaEstaba: !ok });
+});
+
 api.post('/leads/:id/extraer-pedido', requireAuth, requireStore, async (req, res) => {
   const sid = req.user!.storeId!;
   const l = db.prepare('SELECT id, nombre, tel FROM leads WHERE id = ? AND store_id = ?').get(req.params.id, sid) as { id: string; nombre: string; tel: string } | undefined;
@@ -4803,7 +4839,7 @@ api.post('/suscripcion/shopify/revisar', requireAuth, requireStore, async (req, 
 api.get('/shopify/cobro/vuelta', async (req, res) => {
   const ref = String(req.query.ref || '');
   const r = await sa.verificarCobroUnico(ref).catch(() => ({ ok: false, tipo: '' }));
-  const destino: Record<string, string> = { creditos: '/marketing', biblioteca: '/biblioteca', biblioteca_landing: '/tienda-en-linea', tienda_online: '/tienda-en-linea' };
+  const destino: Record<string, string> = { creditos: '/marketing', biblioteca: '/biblioteca', billetera: '/biblioteca', biblioteca_landing: '/tienda-en-linea', tienda_online: '/tienda-en-linea' };
   res.redirect(`${destino[r.tipo || ''] || '/'}?pago=${r.ok ? 'shopify-ok' : 'shopify-no'}`);
 });
 
@@ -5492,7 +5528,24 @@ api.post('/superadmin/biblioteca/:id/enviar-a-tienda', requireAuth, requireAdmin
 // ── Biblioteca de productos (tienda cliente) ─────────────────────────
 api.get('/biblioteca', requireAuth, requireStore, async (req, res) => {
   const { listarBiblioteca } = await import('./biblioteca.js');
-  res.json({ productos: listarBiblioteca(req.user!.storeId!) });
+  // Productos de la Bodega DealFlow: costo por unidad y ciudad de la bodega.
+  const df = (await import('./bodegaDF.js')).infoBibliotecaDF();
+  res.json({ productos: listarBiblioteca(req.user!.storeId!).map((p) => ({ ...p, bodegaDF: df.get(p.id) || null })) });
+});
+
+// Recarga de la billetera de la Bodega DealFlow (Bold; en la app de Shopify, con su facturación).
+api.post('/billetera/recargar', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const { crearCheckoutBilletera, enlaceDePago } = await import('./suscripcion.js');
+  const { ajustesDF } = await import('./bodegaDF.js');
+  const min = ajustesDF().recargaMin;
+  const monto = Number(req.body?.monto) || 0;
+  const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol;
+  const base = `${proto}://${req.get('host')}`;
+  if (await cobroShopify(req, res, 'Recarga de billetera', (p) => crearCheckoutBilletera(req.user!.storeId!, req.user!.email, base, monto, min, p))) return;
+  if (await pagoOffline(req, res, 'una recarga de la billetera')) return;
+  const r = await enlaceDePago(crearCheckoutBilletera(req.user!.storeId!, req.user!.email, base, monto, min), req.user!.email);
+  if (r.error) return res.status(400).json({ error: r.error });
+  res.json({ url: r.url });
 });
 
 // Importa un producto: gratis o ya adquirido → lo clona ya; de pago sin adquirir → pide pago.
@@ -6095,7 +6148,15 @@ webhooks.post('/wompi', async (req, res) => {
 // Skydropx → Conexiones → Webhooks: estados del paquete (guía, recogido, en camino, entregado…).
 webhooks.post('/skydropx/:token', async (req, res) => {
   const sk = await import('./skydropxApi.js');
-  const sid = sk.tiendaPorWebhookSkydropx(String(req.params.token || ''));
+  const token = String(req.params.token || '');
+  // Cuenta de la Bodega DealFlow: el pedido se busca entre los despachados por la bodega.
+  const tDF = sk.tokenWebhookDF();
+  if (tDF && token === tDF) {
+    res.sendStatus(200);
+    sk.procesarWebhookSkydropx(null, req.body || {}).catch((e) => console.warn('[skydropx-webhook] bodega DealFlow', e));
+    return;
+  }
+  const sid = sk.tiendaPorWebhookSkydropx(token);
   if (!sid) return res.sendStatus(404);
   res.sendStatus(200);
   sk.procesarWebhookSkydropx(sid, req.body || {}).catch((e) => console.warn('[skydropx-webhook] error procesando', e));

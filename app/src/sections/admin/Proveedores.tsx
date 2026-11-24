@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Icono, IcoTexto } from '../../components/Icono';
+import { Icono, IcoTexto, IconoColor } from '../../components/Icono';
+import { BodegaDFAdminPanel } from '../../components/BodegaDFAdmin';
 import type { CSSProperties } from 'react';
 import { apiBorrarProveedor, apiCrearProveedor, apiEditarProveedor, apiProveedores, apiVerComoProveedor, type ConvenioConocido, type ProveedorAcceso } from '../../lib/api';
 import { confirmar, notificar } from '../../components/dialogs';
@@ -26,7 +27,7 @@ const btnPri: CSSProperties = { ...btn, background: 'var(--df-brand)', borderCol
 
 interface Form { id?: string; nombre: string; email: string; password: string; convenios: string[] }
 
-export function Proveedores() {
+function AccesosProveedores() {
   const [lista, setLista] = useState<ProveedorAcceso[] | null>(null);
   const [convenios, setConvenios] = useState<ConvenioConocido[]>([]);
   const [form, setForm] = useState<Form | null>(null);
@@ -84,7 +85,7 @@ export function Proveedores() {
         <div style={{ flex: '1 1 320px' }}>
           <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}>Proveedores</h1>
           <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: 0 }}>
-            Crea la cuenta de cada proveedor y vincúlale sus códigos de convenio de Effi. Todos los pedidos de cualquier tienda que salgan con esos convenios le aparecen en su portal, con estadísticas y el seguimiento del envío. Las tiendas no tienen que hacer nada.
+            Crea la cuenta de cada proveedor. Si trabaja con Effi, vincúlale sus convenios: ve en su portal las ventas, tiendas y guías de esos convenios. Si no tiene Effi, déjalo sin convenios: DealFlow le genera las guías (pestaña Bodega DealFlow) y le llegan a su portal para imprimirlas.
           </p>
         </div>
         <a href={URL_PORTAL} target="_blank" rel="noreferrer" style={{ ...btn, textDecoration: 'none', padding: '10px 14px' }}>Portal: {URL_PORTAL.replace(/^https?:\/\//, '')} ↗</a>
@@ -122,9 +123,9 @@ export function Proveedores() {
           </div>
 
           <div style={{ display: 'grid', gap: 6 }}>
-            <div style={{ fontSize: 12.5, fontWeight: 700 }}>Códigos de convenio de Effi</div>
+            <div style={{ fontSize: 12.5, fontWeight: 700 }}>Códigos de convenio de Effi <span style={{ fontWeight: 500, color: 'var(--df-text-muted)' }}>(opcional: solo si el proveedor trabaja con Effi)</span></div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', minHeight: 30 }}>
-              {!form.convenios.length && <span style={{ fontSize: 12.5, color: 'var(--df-text-faint)', alignSelf: 'center' }}>Aún no hay convenios. Escribe el código abajo o elige uno de la lista.</span>}
+              {!form.convenios.length && <span style={{ fontSize: 12.5, color: 'var(--df-text-faint)', alignSelf: 'center' }}>Sin convenios: el proveedor trabaja sin Effi y DealFlow le genera las guías (Bodega DealFlow). Si tiene Effi, escribe el código abajo o elige uno de la lista.</span>}
               {form.convenios.map((c) => (
                 <span key={c} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'var(--df-brand-subtle)', color: 'var(--df-brand-dark)', border: '1px solid var(--df-brand-border)', borderRadius: 999, padding: '4px 6px 4px 11px', fontSize: 12.5, fontWeight: 700 }}>
                   {c}{infoConv(c)?.tiendas.length ? <span style={{ fontWeight: 500, opacity: 0.8 }}>· {infoConv(c)!.tiendas.length} {infoConv(c)!.tiendas.length === 1 ? 'tienda' : 'tiendas'}</span> : null}
@@ -173,7 +174,7 @@ export function Proveedores() {
               <div style={{ fontWeight: 700, fontSize: 14.5 }}>{p.nombre} {!p.activo && <span style={{ fontSize: 11.5, color: 'var(--df-danger)', fontWeight: 700 }}>· desactivado</span>}</div>
               <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)' }}>{p.email} · {p.ultimoAcceso ? `último ingreso ${fechaCorta(p.ultimoAcceso)}` : 'aún no ha entrado'}</div>
               <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 6 }}>
-                {p.convenios.map((c) => <span key={c} title={infoConv(c)?.tiendas.join(', ')} style={{ fontSize: 11.5, fontWeight: 700, fontFamily: 'ui-monospace, Menlo, monospace', background: 'var(--df-surface-2)', borderRadius: 999, padding: '2px 9px' }}>{c}</span>)}
+                {!p.convenios.length && <span style={{ fontSize: 11.5, fontWeight: 700, color: '#A78BFA', background: 'color-mix(in srgb, #A78BFA 14%, transparent)', borderRadius: 999, padding: '2px 9px' }}>Sin Effi · Bodega DealFlow</span>}{p.convenios.map((c) => <span key={c} title={infoConv(c)?.tiendas.join(', ')} style={{ fontSize: 11.5, fontWeight: 700, fontFamily: 'ui-monospace, Menlo, monospace', background: 'var(--df-surface-2)', borderRadius: 999, padding: '2px 9px' }}>{c}</span>)}
               </div>
             </div>
             <div style={{ textAlign: 'right', minWidth: 90 }}>
@@ -190,5 +191,25 @@ export function Proveedores() {
         ))}
       </div>
     </section>
+  );
+}
+
+/** Administración → Proveedores: accesos al portal (convenios de Effi) y la Bodega DealFlow. */
+export function Proveedores() {
+  const [tab, setTab] = useState<'accesos' | 'bodega'>(() => (window.location.hash === '#bodega' ? 'bodega' : 'accesos'));
+  const pestana = (id: 'accesos' | 'bodega', texto: string, icono: 'aliado' | 'bodega', color: string) => (
+    <button onClick={() => { setTab(id); history.replaceState(null, '', id === 'bodega' ? '#bodega' : '#'); }}
+      style={{ ...btn, display: 'inline-flex', alignItems: 'center', gap: 8, borderRadius: 999, padding: '8px 15px', fontSize: 13.5, borderColor: tab === id ? 'var(--df-brand)' : 'var(--df-border)', background: tab === id ? 'var(--df-brand-subtle-2)' : 'var(--df-surface)', color: tab === id ? 'var(--df-brand-dark)' : 'var(--df-text-secondary)' }}>
+      <IconoColor color={color}><Icono nombre={icono} tam={16} /></IconoColor>{texto}
+    </button>
+  );
+  return (
+    <>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+        {pestana('accesos', 'Accesos y convenios', 'aliado', '#60A5FA')}
+        {pestana('bodega', 'Bodega DealFlow', 'bodega', '#A78BFA')}
+      </div>
+      {tab === 'bodega' ? <BodegaDFAdminPanel /> : <AccesosProveedores />}
+    </>
   );
 }

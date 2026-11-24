@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { IcoTexto } from '../components/Icono';
+import { Icono, IcoTexto, IconoColor } from '../components/Icono';
 import type { CSSProperties, ReactNode } from 'react';
 import logo from '../assets/logo.png';
 import { Donut, HBars, LineChart } from '../components/Charts';
@@ -13,11 +13,12 @@ import { fmtCO } from '../lib/fechaCO';
  */
 
 type Etapa = 'por_despachar' | 'por_recoger' | 'transito' | 'reparto' | 'oficina' | 'novedad' | 'entregado' | 'devuelto' | 'cancelado';
-interface Yo { nombre: string; email: string; convenios: string[]; comoAdmin?: boolean }
+interface Yo { nombre: string; email: string; convenios: string[]; comoAdmin?: boolean; bodegaDF?: boolean }
 interface Pedido {
   id: string; codigo: string; numero: number; fecha: string; dia: string; tienda: string; cliente: string; tel: string; ciudad: string; departamento: string; direccion: string;
   estado: string; estadoTransportadora: string; etapa: Etapa; convenio: string; guia: string; guiaUrl: string; transportadora: string; remision: string;
   total: number; items: { qty: number; nombre: string }[]; unidades: number; ultimoMovimiento: { fecha: string; estado: string; observacion: string } | null;
+  bodegaDF?: boolean; recogido?: string; costoProveedor?: number; escalado?: { nota: string; at: string; respuesta: string; resuelto: string } | null;
 }
 interface Detalle extends Pedido {
   entregaEstimada: string;
@@ -27,7 +28,7 @@ interface Detalle extends Pedido {
 }
 interface Tablero {
   desde: string; hasta: string; hoy: string;
-  resumen: { pedidos: number; unidades: number; valor: number; porDespachar: number; enCamino: number; novedades: number; entregados: number; devueltos: number; valorEntregado: number; efectividad: number | null; tiendas: number };
+  resumen: { pedidos: number; unidades: number; valor: number; porDespachar: number; enCamino: number; novedades: number; entregados: number; devueltos: number; valorEntregado: number; efectividad: number | null; tiendas: number; porImprimir?: number; escalados?: number; porCobrar?: number; tarifasGuias?: number; bodegaDF?: number };
   serie: { fecha: string; valor: number }[];
   porEtapa: { id: Etapa; label: string; color: string; valor: number }[];
   topProductos: { label: string; valor: number }[];
@@ -260,7 +261,7 @@ function Panel({ yo, onSalir }: { yo: Yo; onSalir: () => void }) {
           <div style={{ flex: 1 }} />
           <div className="pp-quien" style={{ textAlign: 'right', lineHeight: 1.2, minWidth: 0 }}>
             <div style={{ fontWeight: 700, fontSize: 13.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{yo.nombre}</div>
-            <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>Convenio{yo.convenios.length === 1 ? '' : 's'} {yo.convenios.join(' · ')}</div>
+            <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>{[yo.convenios.length ? `Convenio${yo.convenios.length === 1 ? '' : 's'} ${yo.convenios.join(' · ')}` : '', yo.bodegaDF ? 'Bodega DealFlow' : ''].filter(Boolean).join(' · ')}</div>
           </div>
           <button className="pp-btn" onClick={onSalir}>Salir</button>
         </div>
@@ -275,7 +276,7 @@ function Panel({ yo, onSalir }: { yo: Yo; onSalir: () => void }) {
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
           <div style={{ flex: '1 1 260px' }}>
             <h1 style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}>Hola, {yo.nombre.split(' ')[0]} 👋</h1>
-            <p style={{ margin: 0, color: 'var(--df-text-muted)', fontSize: 14.5 }}>Estos son los pedidos hechos con tu{yo.convenios.length === 1 ? '' : 's'} convenio{yo.convenios.length === 1 ? '' : 's'}{t && t.resumen.tiendas > 1 ? ` en ${t.resumen.tiendas} tiendas` : ''}{t ? ` del ${new Date(t.desde + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })} al ${new Date(t.hasta + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' })}` : ''}.</p>
+            <p style={{ margin: 0, color: 'var(--df-text-muted)', fontSize: 14.5 }}>{yo.convenios.length ? <>Estos son los pedidos hechos con tu{yo.convenios.length === 1 ? '' : 's'} convenio{yo.convenios.length === 1 ? '' : 's'}{yo.bodegaDF ? ' y los de tu bodega' : ''}</> : <>Estos son los pedidos que DealFlow despacha desde tu bodega</>}{t && t.resumen.tiendas > 1 ? ` en ${t.resumen.tiendas} tiendas` : ''}{t ? ` del ${new Date(t.desde + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })} al ${new Date(t.hasta + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' })}` : ''}.</p>
           </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
             {PERIODOS.map((p) => <button key={p.id} className="pp-chip" aria-pressed={periodo === p.id} onClick={() => { setPeriodo(p.id); if (p.id === 'rango' && !rango.desde && t) setRango({ desde: t.desde, hasta: t.hasta }); }}>{p.label}</button>)}
@@ -292,6 +293,7 @@ function Panel({ yo, onSalir }: { yo: Yo; onSalir: () => void }) {
         {error && <div style={{ color: 'var(--df-danger)', fontSize: 13.5 }}>{error}</div>}
         {!t && !error && <div style={{ color: 'var(--df-text-muted)', padding: 30, textAlign: 'center' }}>Cargando tus pedidos…</div>}
 
+        {t && r && (yo.bodegaDF || (r.bodegaDF || 0) > 0) && <BodegaPortal t={t} onCambio={cargar} onAbrir={setAbierto} comoAdmin={!!yo.comoAdmin} />}
         {t && r && (
           <>
             <div className="pp-kpis">
@@ -399,8 +401,23 @@ function Dato({ k, v }: { k: string; v: ReactNode }) {
 function DetallePedido({ id, onCerrar }: { id: string; onCerrar: () => void }) {
   const [d, setD] = useState<Detalle | null>(null);
   const [error, setError] = useState('');
+  const [nota, setNota] = useState('');
+  const [enviando, setEnviando] = useState(false);
+  const recargar = () => void api<Detalle>(`/pedido/${encodeURIComponent(id)}`).then((r) => (r.data ? setD(r.data) : setError(r.error || 'No se pudo cargar.')));
+  const escalar = async () => {
+    setEnviando(true);
+    const r = await api<{ ok: true }>(`/pedido/${encodeURIComponent(id)}/escalar`, { method: 'POST', body: { nota } });
+    setEnviando(false);
+    if (r.error) return alertaPortal(r.error);
+    setNota(''); recargar();
+  };
+  const entregado = async () => {
+    const r = await api<{ marcados: number }>('/recogidos', { method: 'POST', body: { ids: [id] } });
+    if (r.error) return alertaPortal(r.error);
+    recargar();
+  };
   useEffect(() => {
-    void api<Detalle>(`/pedido/${encodeURIComponent(id)}`).then((r) => (r.data ? setD(r.data) : setError(r.error || 'No se pudo cargar.')));
+    recargar();
     const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') onCerrar(); };
     window.addEventListener('keydown', esc);
     return () => window.removeEventListener('keydown', esc);
@@ -437,6 +454,30 @@ function DetallePedido({ id, onCerrar }: { id: string; onCerrar: () => void }) {
                   </div>
                 ))}
               </Caja>
+              {d.bodegaDF && (
+                <section className="pp-card" style={{ padding: 16, minWidth: 0, borderColor: 'color-mix(in srgb, #A78BFA 45%, var(--df-border))', display: 'grid', gap: 10 }}>
+                  <h2 style={{ fontSize: 14.5, fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}><IconoColor color="#A78BFA"><Icono nombre="bodega" tam={17} /></IconoColor>Bodega DealFlow</h2>
+                  <Dato k="Te pagamos" v={d.costoProveedor ? pesos(d.costoProveedor) + ' (cuando se entregue)' : ''} />
+                  <Dato k="Paquete" v={d.recogido ? `Entregado a la transportadora · ${fechaHora(d.recogido)}` : d.guia ? 'Por entregar a la transportadora' : 'Aún sin guía'} />
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {d.guiaUrl && <a className="pp-btn" href={d.guiaUrl} target="_blank" rel="noreferrer" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6 }}><IconoColor color="#A78BFA"><Icono nombre="guia" tam={15} /></IconoColor>Imprimir guía</a>}
+                    {d.guia && !d.recogido && <button className="pp-btn" onClick={() => void entregado()} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><IconoColor color="#34D399"><Icono nombre="entregado" tam={15} /></IconoColor>Ya lo entregué a la transportadora</button>}
+                  </div>
+                  {d.escalado ? (
+                    <div style={{ padding: '10px 12px', borderRadius: 12, background: d.escalado.resuelto ? 'var(--df-surface-2)' : 'rgba(239,68,68,.08)', border: `1px solid ${d.escalado.resuelto ? 'var(--df-border)' : 'rgba(239,68,68,.3)'}`, fontSize: 13.5, display: 'grid', gap: 4 }}>
+                      <b>Novedad escalada a la tienda · {fechaHora(d.escalado.at)}</b>
+                      <span>{d.escalado.nota}</span>
+                      {d.escalado.respuesta ? <span style={{ color: '#047857', fontWeight: 600 }}>La tienda respondió: {d.escalado.respuesta}</span> : <span style={{ color: 'var(--df-text-muted)' }}>Esperando respuesta de la tienda…</span>}
+                    </div>
+                  ) : d.etapa !== 'entregado' && d.etapa !== 'cancelado' && d.guia ? (
+                    <div style={{ display: 'grid', gap: 6 }}>
+                      <span style={{ fontSize: 13, color: 'var(--df-text-muted)' }}>¿La transportadora reporta un problema (dirección errada, cliente no estaba…)? Cuéntale a la tienda: ella habla con el cliente.</span>
+                      <textarea value={nota} onChange={(e) => setNota(e.target.value)} rows={2} placeholder="Ej.: la transportadora dice que la dirección está incompleta" style={{ font: 'inherit', fontSize: 13.5, padding: '9px 11px', borderRadius: 10, border: '1px solid var(--df-border)', background: 'var(--df-surface)', color: 'var(--df-text-body)', resize: 'vertical' }} />
+                      <div><button className="pp-btn" disabled={enviando || nota.trim().length < 4} onClick={() => void escalar()} style={{ background: '#DC2626', color: '#fff', borderColor: '#DC2626' }}>{enviando ? 'Enviando…' : 'Escalar novedad a la tienda'}</button></div>
+                    </div>
+                  ) : null}
+                </section>
+              )}
               <Caja titulo="Envío">
                 {d.guia ? (
                   <>
@@ -493,5 +534,74 @@ function Linea({ items }: { items: { titulo: string; detalle?: string; fecha: st
         </li>
       ))}
     </ol>
+  );
+}
+
+/** Aviso simple del portal (no usa diálogos del navegador). */
+function alertaPortal(texto: string) {
+  const el = document.createElement('div');
+  el.textContent = texto;
+  el.setAttribute('role', 'alert');
+  Object.assign(el.style, { position: 'fixed', bottom: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: '99', background: '#DC2626', color: '#fff', padding: '10px 16px', borderRadius: '12px', fontWeight: '700', fontSize: '14px', boxShadow: '0 10px 30px -10px rgba(0,0,0,.5)' });
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 4500);
+}
+
+/** Bodega DealFlow en el portal: guías por imprimir/entregar, novedades escaladas y lo que DealFlow le debe. */
+function BodegaPortal({ t, onCambio, onAbrir, comoAdmin }: { t: Tablero; onCambio: () => void; onAbrir: (id: string) => void; comoAdmin: boolean }) {
+  const r = t.resumen;
+  const porDespachar = t.pedidos.filter((p) => p.bodegaDF && p.guia && !p.recogido && p.etapa !== 'cancelado');
+  const sinGuia = t.pedidos.filter((p) => p.bodegaDF && !p.guia && p.etapa !== 'cancelado').length;
+  const [sel, setSel] = useState<Set<string>>(new Set());
+  const [marcando, setMarcando] = useState(false);
+  const todos = sel.size === porDespachar.length && porDespachar.length > 0;
+  const elegir = (id: string) => setSel((x) => { const n = new Set(x); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const ids = () => (sel.size ? [...sel] : porDespachar.map((p) => p.id));
+  const imprimir = () => window.open('/api/proveedor/guias.pdf?ids=' + encodeURIComponent(ids().join(',')), '_blank');
+  const marcar = async () => {
+    setMarcando(true);
+    const res = await api<{ marcados: number }>('/recogidos', { method: 'POST', body: { ids: ids() } });
+    setMarcando(false);
+    if (res.error) return alertaPortal(res.error);
+    setSel(new Set()); onCambio();
+  };
+  return (
+    <section className="pp-card" style={{ overflow: 'hidden', borderColor: 'color-mix(in srgb, #A78BFA 40%, var(--df-border))' }}>
+      <div style={{ padding: '16px 18px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', background: 'linear-gradient(120deg, color-mix(in srgb, #10b981 14%, transparent), color-mix(in srgb, #2e8bff 12%, transparent) 55%, color-mix(in srgb, #7658ff 14%, transparent))' }}>
+        <span style={{ width: 40, height: 40, borderRadius: 12, display: 'grid', placeItems: 'center', background: 'linear-gradient(120deg, #10b981, #2e8bff 55%, #7658ff)', color: '#fff', boxShadow: '0 8px 20px -8px rgba(46,139,255,.8)' }}><Icono nombre="bodega" tam={20} /></span>
+        <div style={{ flex: '1 1 240px' }}>
+          <h2 style={{ fontSize: 17, fontWeight: 800, margin: 0 }}>Bodega DealFlow</h2>
+          <div style={{ fontSize: 13, color: 'var(--df-text-muted)' }}>DealFlow genera las guías con recogida en tu bodega. Imprímelas, pégalas y márcalas cuando pase la transportadora.</div>
+        </div>
+      </div>
+      <div className="pp-kpis" style={{ padding: 14 }}>
+        <Kpi titulo="Guías por despachar" valor={String(porDespachar.length)} sub={sinGuia ? `${sinGuia} generándose` : 'listas para imprimir'} color="#A78BFA" />
+        <Kpi titulo="Novedades escaladas" valor={String(r.escalados || 0)} sub="esperando a la tienda" color="#EF4444" />
+        <Kpi titulo="Te debemos (entregados)" valor={pesosCorto(Math.max(0, r.porCobrar || 0))} sub={(r.porCobrar || 0) < 0 ? `tarifas de guías por descontar: ${pesos(-(r.porCobrar || 0))}` : r.tarifasGuias ? `ya descontado ${pesos(r.tarifasGuias)} de guías` : 'DealFlow te paga por fuera'} color="#10B981" />
+        <Kpi titulo="Pedidos de la bodega" valor={String(r.bodegaDF || 0)} sub="en este periodo" color="#3B82F6" />
+      </div>
+      {porDespachar.length > 0 && (
+        <>
+          <div style={{ padding: '0 16px 12px', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <label style={{ display: 'inline-flex', gap: 7, alignItems: 'center', fontSize: 13.5, fontWeight: 600, cursor: 'pointer' }}>
+              <input type="checkbox" checked={todos} onChange={() => setSel(todos ? new Set() : new Set(porDespachar.map((p) => p.id)))} />Elegir todas
+            </label>
+            <div style={{ flex: 1 }} />
+            <button className="pp-btn" onClick={imprimir} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><IconoColor color="#A78BFA"><Icono nombre="guia" tam={15} /></IconoColor>Imprimir {sel.size ? sel.size : 'todas las'} guía{(sel.size || porDespachar.length) === 1 ? '' : 's'}</button>
+            {!comoAdmin && <button className="pp-btn" disabled={marcando} onClick={() => void marcar()} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#059669', color: '#fff', borderColor: '#059669' }}><Icono nombre="entregado" tam={15} />{marcando ? 'Marcando…' : `Entregadas a la transportadora${sel.size ? ` (${sel.size})` : ''}`}</button>}
+          </div>
+          {porDespachar.slice(0, 200).map((p) => (
+            <div key={p.id} style={{ display: 'grid', gridTemplateColumns: '28px minmax(0,1fr) auto', gap: 10, alignItems: 'center', padding: '10px 16px', borderTop: '1px solid var(--df-border)' }}>
+              <input type="checkbox" checked={sel.has(p.id)} onChange={() => elegir(p.id)} aria-label={`Elegir ${p.codigo}`} />
+              <button onClick={() => onAbrir(p.id)} style={{ background: 'none', border: 0, padding: 0, font: 'inherit', color: 'inherit', textAlign: 'left', cursor: 'pointer', minWidth: 0 }}>
+                <div style={{ fontWeight: 700 }}>{p.codigo} · {p.items.map((i) => `${i.qty}× ${i.nombre}`).join(', ')}</div>
+                <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)' }}>{p.cliente} · {p.ciudad} · {p.transportadora} <span style={{ fontFamily: 'ui-monospace, Menlo, monospace' }}>{p.guia}</span></div>
+              </button>
+              {p.guiaUrl ? <a className="pp-btn" href={p.guiaUrl} target="_blank" rel="noreferrer" style={{ textDecoration: 'none', padding: '6px 10px' }}><IconoColor color="#A78BFA"><Icono nombre="guia" tam={14} /></IconoColor></a> : <span />}
+            </div>
+          ))}
+        </>
+      )}
+    </section>
   );
 }

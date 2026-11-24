@@ -191,7 +191,9 @@ export async function resumenPedidoDelBot(storeId: string, orderId: string, lead
   // Solo cuenta un RESUMEN DE PEDIDO de verdad («resumen de tu pedido» + productos/dirección) y un «sí»
   // claro del cliente después. Antes bastaba cualquier mensaje con «resumen» y cualquier respuesta
   // («gracias»): así un pedido repetido quedó confirmado y se despachó solo (DF-2823).
-  const iRes = ult.findIndex((m) => m.de === 'bot' && /(resumen de tu pedido|resumen del pedido|order summary)/i.test(m.texto) && /(direcci|address|ciudad|city)/i.test(m.texto));
+  // También cuenta el resumen que escribe el propio asistente («*Productos:* … *Dirección:* … ¿Confirmas que
+  // los datos están correctos?»): sin esto un «Bien» a ESE resumen no confirmaba y se le volvía a preguntar.
+  const iRes = ult.findIndex((m) => m.de === 'bot' && ((/(resumen de tu pedido|resumen del pedido|order summary)/i.test(m.texto) && /(direcci|address|ciudad|city)/i.test(m.texto)) || esResumenDelAsistente(m.texto)));
   const confirmado = iRes > 0 && ult.slice(0, iRes).some((m) => m.de === 'cliente' && esSi(m.texto) && !esNo(m.texto));
   const texto = textoResumenPedido(storeId, orderId, confirmado ? 'registrado' : 'preguntar', idioma);
   const { sendWhatsappText, marcarEnviado } = await import('./wa.js');
@@ -271,8 +273,25 @@ export async function enviarConfirmacion(storeId: string, orderId: string): Prom
 
 // Sí / No del comprador (botones de la plantilla o escrito a mano).
 const limpio = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9\s👍✅❌]/gu, ' ').replace(/\s+/g, ' ').trim();
-const SI = new Set(['si', 'sii', 'siii', 'sip', 'sisas', 'sisa', 'confirmo', 'confirmado', 'confirmar', 'dale', 'listo', 'ok', 'okay', 'okey', 'oki', 'correcto', 'claro', 'perfecto', 'afirmativo', 'enviamelo', 'envialo', 'envienlo', 'mandalo', 'mandenlo', 'hagale', 'adelante', 'bueno', 'vale', 'va', 'obvio', 'yes', '👍', '✅']);
+const SI = new Set(['si', 'sii', 'siii', 'sip', 'sisas', 'sisa', 'confirmo', 'confirmado', 'confirmar', 'dale', 'listo', 'ok', 'okay', 'okey', 'oki', 'correcto', 'claro', 'perfecto', 'afirmativo', 'enviamelo', 'envialo', 'envienlo', 'mandalo', 'mandenlo', 'hagale', 'adelante', 'bueno', 'vale', 'va', 'obvio', 'yes', 'bien', 'exacto', 'excelente', 'super', 'genial', 'okis', 'sale', 'eso', '👍', '✅', '👌']);
 const NO = new Set(['no', 'nop', 'nel', 'cancelar', 'cancela', 'cancelalo', 'cancelado', '❌']);
+/**
+ * ¿Lo último que dijo el cliente es un «sí / bien / correcto» a un resumen del pedido (el del asistente
+ * o el de DealFlow)? Entonces el pedido queda confirmado sin volver a preguntarle.
+ */
+export function confirmoResumenReciente(leadId: string): boolean {
+  const ult = db.prepare("SELECT de, texto FROM messages WHERE lead_id = ? AND TRIM(COALESCE(texto,'')) != '' AND created_at > datetime('now','-6 hours') ORDER BY created_at DESC, rowid DESC LIMIT 6").all(leadId) as { de: string; texto: string }[];
+  const iCli = ult.findIndex((m) => m.de === 'cliente');
+  if (iCli < 0 || !esSi(ult[iCli].texto) || esNo(ult[iCli].texto)) return false;
+  const bot = ult.slice(iCli + 1).find((m) => m.de === 'bot');
+  return !!bot && (esResumenDelAsistente(bot.texto) || /(resumen de tu pedido|resumen del pedido)/i.test(bot.texto));
+}
+/** Resumen de pedido escrito por el asistente: varios datos del pedido + la pregunta de confirmación. */
+export function esResumenDelAsistente(texto: string): boolean {
+  const t = limpio(texto);
+  const datos = [/producto/, /\btotal\b|vas a pagar|valor/, /direccion/, /ciudad/, /departamento/, /contacto|celular|telefono/, /metodo de pago|contraentrega|contra entrega/].filter((r) => r.test(t)).length;
+  return datos >= 3 && /confirm|correct|esta bien|todo bien|todo esta bien/.test(t);
+}
 const esSi = (t: string) => { const l = limpio(t); const w = l.split(' '); return (SI.has(w[0]) && !/\b(pero|cambi\w*)\b/.test(l)) || /\b(si confirmo|de una|si senor|si senora|esta bien|de acuerdo|por supuesto|todo bien|todo correcto|asi es|me lo envian|lo espero)\b/.test(l); };
 const esNo = (t: string) => { const l = limpio(t); return NO.has(l.split(' ')[0]) || /\b(ya no|no quiero|no lo quiero|no gracias|cancel)/.test(l); };
 
@@ -335,6 +354,8 @@ export async function confirmarPedidoCliente(storeId: string, orderId: string, t
     }
   }
   void etiquetar(storeId, orderId, ['confirmado-whatsapp']);
+  // Bodega DealFlow: sus pedidos salen siempre solos, con la cuenta de DealFlow (nunca por el Effi de la tienda).
+  if ((await import('./bodegaDF.js')).alConfirmarPedido(storeId, orderId)) return true;
   // Landing: despacha solo si esa landing lo tiene activo. Shopify: según su configuración.
   // Los demás (asistente, a mano): si la tienda tiene "Enviar solo a Effi" encendido.
   const auto = txt(o.origen) === 'landing'

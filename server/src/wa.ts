@@ -89,10 +89,79 @@ function registrarFallo(rowId: string, error: string): void {
       void import('./push.js').then((p) => p.enviarPush(m.store_id, 'contactos', '⚠️ WhatsApp: Meta bloqueó los envíos', 'Tu cuenta de WhatsApp Business está restringida o en revisión. Revisa el estado de la cuenta en Meta.', { url: '/whatsapp' })).catch(() => {});
       void import('./correo.js').then((c) => c.correoATienda(m.store_id, 'alertas', 'WhatsApp: Meta bloqueó los envíos', '⚠️ Meta está bloqueando tus mensajes de WhatsApp', ['Meta tiene tu cuenta de WhatsApp Business <b>restringida o en revisión</b> y no está dejando salir ningún mensaje (código 131031). No es un fallo de DealFlow.', 'Entra a <b>business.facebook.com → Estado de la cuenta</b>, mira el motivo y pide la revisión si aparece el botón. Cuando Meta la libere, los mensajes vuelven a salir solos.'], { texto: 'Ver estado de la cuenta', url: 'https://business.facebook.com/business-support-home/' })).catch(() => {});
     }
-    if (m.de === 'bot' && !/bloqueaste|bloqueado/i.test(error)) {
-      void import('./pasoHumano.js').then((h) => h.pasarAHumano(m.store_id, m.lead_id, `WhatsApp no entregó la respuesta del asistente (${error})`)).catch(() => {});
-    }
+    // Antes, cualquier fallo de envío del bot pasaba el chat al equipo. Muchos fallos son solo de
+    // conexión (p. ej. el servidor reiniciándose al publicar un cambio) y esos chats quedaban en
+    // «humano» sin que nadie los atendiera. Ahora el asistente SIGUE con el chat y los fallos
+    // pasajeros se reintentan solos (reintentarEnviosBot).
+    if (m.de === 'bot' && esFalloPasajero(error)) registrarLog(m.store_id, 'info', 'envio', 'Se reintenta enviar el mensaje en un momento (el asistente sigue atendiendo el chat).', m.lead_id);
   } catch { /* nunca tumbar el flujo */ }
+}
+
+/** ¿El fallo es de conexión / momentáneo (se puede reintentar) y no un rechazo definitivo de Meta? */
+export function esFalloPasajero(error: string): boolean {
+  const e = String(error || '');
+  // Definitivos: ventana de 24 h, número inválido, bloqueos, formatos de archivo, pagos y restricciones de la cuenta.
+  if (/131026|131047|131051|130472|131031|131042|131008|131009|132\d{3}|368|bloque|24 h|ventana|no acepta|formato|pesa más|vac[ií]o|p[aá]gina web|no se reconoci|inv[aá]lid|no existe|no es un/i.test(e)) return false;
+  return true;
+}
+
+// Reintentos de envío del bot (columna messages.reintentos).
+try { db.exec('ALTER TABLE messages ADD COLUMN reintentos INTEGER NOT NULL DEFAULT 0'); } catch { /* ya existe */ }
+
+/**
+ * Reenvía solos los mensajes del asistente que fallaron por un problema pasajero (hasta 3 veces,
+ * en los 40 minutos siguientes). Solo texto y archivos guardados de la tienda; dentro de la
+ * ventana de 24 h (fuera de ella WhatsApp no deja texto libre).
+ */
+export async function reintentarEnviosBot(): Promise<number> {
+  const filas = db.prepare(`SELECT m.id, m.texto, m.tipo, m.media_url, m.media_mime, m.error, l.id lead_id, l.store_id, l.wa_id, l.tel, l.asignado
+      FROM messages m JOIN leads l ON l.id = m.lead_id
+      WHERE m.de = 'bot' AND m.estado = 'fallido' AND m.reintentos < 3 AND m.created_at > datetime('now','-40 minutes')
+      ORDER BY m.created_at LIMIT 30`).all() as { id: string; texto: string; tipo: string; media_url: string | null; media_mime: string | null; error: string; lead_id: string; store_id: string; wa_id: string; tel: string; asignado: string }[];
+  let n = 0;
+  for (const m of filas) {
+    db.prepare('UPDATE messages SET reintentos = reintentos + 1 WHERE id = ?').run(m.id);
+    if (!esFalloPasajero(m.error) || !ventanaDeLead(m.store_id, m.lead_id).abierta) continue;
+    const destino = m.wa_id || m.tel;
+    let r: { ok: boolean; error?: string; wamid?: string };
+    if (m.tipo && m.tipo !== 'texto' && m.media_url) {
+      const { mediaPath, tipoDeMime } = await import('./media.js');
+      const mm = String(m.media_url).match(/\/api\/media\/([^/?#]+)\/([^/?#]+)/);
+      const archivo = mm ? mediaPath(mm[1], mm[2]) : '';
+      const { existsSync, readFileSync } = await import('node:fs');
+      if (!archivo || !existsSync(archivo)) continue;
+      const mime = m.media_mime || 'application/octet-stream';
+      r = await sendWhatsappMedia(m.store_id, destino, { buffer: readFileSync(archivo), mime, tipo: tipoDeMime(mime) }, m.texto || '', '', m.tel);
+    } else if (String(m.texto || '').trim()) {
+      r = await sendWhatsappText(m.store_id, destino, m.texto, m.tel);
+    } else continue;
+    marcarEnviado(m.id, r);
+    if (r.ok) { n++; registrarLog(m.store_id, 'info', 'envio', 'Mensaje del asistente reenviado: esta vez sí salió.', m.lead_id); }
+    await new Promise((res) => setTimeout(res, 1500));
+  }
+  return n;
+}
+
+/**
+ * Al arrancar el servidor (p. ej. tras publicar un cambio): chats que atiende el asistente donde
+ * el cliente escribió en los últimos 30 minutos y el bot no alcanzó a responder → se responden.
+ * Y los chats que quedaron en «humano» SOLO porque falló un envío (regla vieja) vuelven al bot.
+ */
+export async function retomarChatsAlArrancar(): Promise<void> {
+  try {
+    const { ASIGNADO_EQUIPO } = await import('./pasoHumano.js');
+    const devueltos = db.prepare(`UPDATE leads SET asignado = 'Asistente (bot)' WHERE asignado = ? AND id IN (
+        SELECT lead_id FROM event_log WHERE evento = 'humano' AND detalle LIKE '%no entregó la respuesta del asistente%' AND created_at > datetime('now','-3 days') AND lead_id IS NOT NULL)
+      AND NOT EXISTS (SELECT 1 FROM messages mm WHERE mm.lead_id = leads.id AND mm.de = 'vendedor' AND mm.created_at > datetime('now','-3 days'))`).run(ASIGNADO_EQUIPO);
+    if (devueltos.changes) console.log(`[wa] ${devueltos.changes} chat(s) devueltos al asistente (habían pasado a humano solo por un fallo de envío)`);
+  } catch (e) { console.error('[wa] devolver chats al asistente', e); }
+  const pend = db.prepare(`SELECT l.id, l.store_id FROM leads l WHERE l.asignado LIKE '%Asistente%' AND l.ult_de = 'cliente'
+      AND l.ult_cliente_at > datetime('now','-30 minutes') AND l.ult_cliente_at < datetime('now','-20 seconds') LIMIT 100`).all() as { id: string; store_id: string }[];
+  if (pend.length) console.log(`[wa] retomando ${pend.length} chat(s) que quedaron sin respuesta durante el reinicio`);
+  for (const p of pend) {
+    try { const a = await import('./ai.js'); await a.maybeAutoReply(p.store_id, p.id); } catch (e) { console.error('[wa] retomar chat', p.id, e); }
+    await new Promise((res) => setTimeout(res, 2500));
+  }
 }
 
 interface MediaInfo {

@@ -296,6 +296,25 @@ export function crearCheckoutBiblioteca(storeId: string, correo: string, redirec
   return { url: wompiUrl(referencia, monto, correo, vuelta), referencia, monto: monto, vuelta, descripcion: 'DealFlow · Producto de la Biblioteca' };
 }
 
+/**
+ * Recarga de la billetera de la Bodega DealFlow (pesos). Al aprobarse, el monto se suma al saldo
+ * de la tienda. No es un ingreso de DealFlow: es dinero de la tienda en custodia.
+ */
+export function crearCheckoutBilletera(storeId: string, correo: string, redirectBase: string, monto: number, minimo: number, pasarela: Pasarela = 'wompi'): Resultado {
+  const s = db.prepare('SELECT id FROM stores WHERE id = ?').get(storeId) as { id: string } | undefined;
+  if (!s) return { error: 'Tienda no encontrada.' };
+  const m = Math.round(Number(monto) || 0);
+  if (m < minimo) return { error: `La recarga mínima es $${minimo.toLocaleString('es-CO')}.` };
+  if (m > 10_000_000) return { error: 'La recarga máxima es $10.000.000 por pago.' };
+  if (pasarela === 'wompi' && !pasarelaLista()) return { error: SIN_PASARELA };
+  const referencia = `DF-BIL-${storeId.slice(0, 8)}-${Date.now()}`;
+  db.prepare('INSERT INTO pagos (id, store_id, plan, monto, referencia, estado, gateway, tipo) VALUES (?,?,?,?,?,?,?,?)')
+    .run(uid(), storeId, 'billetera', m, referencia, 'pendiente', pasarela, 'billetera');
+  if (pasarela === 'shopify') return { referencia, monto: m };
+  const vuelta = `${redirectBase}/biblioteca?pago=ok`;
+  return { url: wompiUrl(referencia, m, correo, vuelta), referencia, monto: m, vuelta, descripcion: 'DealFlow · Recarga de billetera (Bodega DealFlow)' };
+}
+
 /** Pago único de una landing de la Biblioteca de landings (el id viaja en `plan`, tipo 'biblioteca_landing'). */
 export function crearCheckoutBibliotecaLanding(storeId: string, correo: string, redirectBase: string, libId: string, pasarela: Pasarela = 'wompi'): Resultado {
   const lib = getLibraryLanding(libId);
@@ -396,6 +415,16 @@ export function aplicarPagoAprobado(referencia: string, transaccion?: string, de
   if (pago.tipo === 'creditos') {
     abonar(pago.store_id, pago.creditos, 'Recarga de créditos', referencia);
     console.log(`[creditos] recarga aprobada ${referencia} → tienda ${pago.store_id} +${pago.creditos} créditos`);
+    return true;
+  }
+
+  // Recarga de la billetera de la Bodega DealFlow: suma al saldo (idempotente por la referencia).
+  if (pago.tipo === 'billetera') {
+    void import('./bodegaDF.js').then((b) => {
+      b.moverBilletera(pago.store_id, 'recarga', Number((db.prepare('SELECT monto FROM pagos WHERE id = ?').get(pago.id) as { monto: number }).monto) || 0,
+        { detalle: `Recarga con ${pago.gateway === 'bold' ? 'Bold' : pago.gateway === 'shopify' ? 'Shopify' : 'Wompi'}`, quien: 'Pasarela', referencia: `recarga:${referencia}` });
+      console.log(`[billetera] recarga aprobada ${referencia} → tienda ${pago.store_id}`);
+    }).catch((e) => console.error('[billetera] recarga', referencia, e));
     return true;
   }
 

@@ -565,6 +565,12 @@ export interface PropuestaPedido {
   cliente: string; tel: string; departamento: string; ciudad: string; direccion: string;
   items: { qty: number; nombre: string; precio: number; productId?: string; variantId?: string; label?: string }[]; total: number;
 }
+export interface PedidoReciente {
+  resumen: { texto: string; fecha: string } | null;
+  pedido: { rowId: string; id: string; estado: string; confirmacion: string; total: number; cliente: string; tel: string; ciudad: string; departamento: string; direccion: string; guia: string; fecha: string; items: { qty: number; nombre: string; precio: number }[] } | null;
+}
+export const apiPedidoReciente = (leadId: string) => req<PedidoReciente>(`/api/leads/${encodeURIComponent(leadId)}/pedido-reciente`, 'GET');
+export const apiConfirmarPedidoChat = (rowId: string, avisar = true) => req<{ ok: true; yaEstaba: boolean }>(`/api/orders/${encodeURIComponent(rowId)}/confirmar-chat`, 'POST', { avisar });
 export const apiExtraerPedido = (leadId: string) =>
   req<{ propuesta: PropuestaPedido | null; ordenExistente: { rowId: string; id: string } | null }>(`/api/leads/${leadId}/extraer-pedido`, 'POST');
 export const apiActualizarPedido = (rowId: string, body: { cliente: string; tel?: string; departamento?: string; ciudad?: string; direccion?: string; nota?: string; envio?: number; total?: number; items?: { qty: number; nombre: string; precio: number }[] }) =>
@@ -958,7 +964,52 @@ export const apiToggleHideStore = (id: string, oculta: boolean) => req<{ ok: tru
 // ── Biblioteca de productos ──
 export interface LibraryItem {
   id: string; nombre: string; precio: number; gratis: boolean; precioImportacion: number; portada: string | null; adquirido: boolean;
+  /** Producto de la Bodega DealFlow: lo despacha DealFlow; la tienda paga el costo por unidad + envío al despachar. */
+  bodegaDF?: { costo: number; costoMax: number; ciudad: string } | null;
 }
+
+// ── Bodega DealFlow ──
+export interface MovBilletera { id: string; tipo: string; nombre: string; monto: number; detalle: string; pedido: string; fecha: string }
+export interface RetiroBilletera { id: string; monto: number; estado: string; nota: string; fecha: string; resuelto: string }
+export interface PedidoDF {
+  id: string; codigo: string; tienda: string; storeId: string; cliente: string; ciudad: string; total: number; estado: string; dfEstado: string; dfEstadoTexto: string; detalle: string;
+  guia: string; guiaUrl: string; transportadora: string; estadoTransportadora: string; producto: number; envio: number; recaudo: number; cod: boolean; recogido: string; fecha: string; servicioTienda: number; servicio: number;
+  escalado: { nota: string; at: string; respuesta: string; resuelto: string } | null;
+}
+export interface BodegaDFTienda {
+  saldo: number; movimientos: MovBilletera[]; retiros: RetiroBilletera[]; pedidos: PedidoDF[]; listo: boolean;
+  mes: { recargas: number; despachos: number; cobrado: number };
+  ajustes: { recargaMin: number; retiroMin: number; comisionPct: number; comisionFija: number; fleteDevolucionPct: number; tarifaTienda: number };
+}
+export const apiBodegaDF = () => req<BodegaDFTienda>('/api/bodega-df', 'GET');
+export const apiRecargarBilletera = (monto: number) => req<{ url: string; shopify?: boolean }>('/api/billetera/recargar', 'POST', { monto });
+export const apiRetiroBilletera = (monto: number, datos: string) => req<{ ok: true }>('/api/bodega-df/retiro', 'POST', { monto, datos });
+export const apiDespacharDF = (id: string) => req<{ ok: true; guia: string }>(`/api/bodega-df/pedidos/${encodeURIComponent(id)}/despachar`, 'POST');
+export const apiResolverEscaladoDF = (id: string, respuesta: string) => req<{ ok: true }>(`/api/bodega-df/pedidos/${encodeURIComponent(id)}/resolver`, 'POST', { respuesta });
+
+export interface BodegaProvDF { empresa: string; telefono: string; email: string; direccion: string; referencia: string; departamento: string; ciudad: string; nit: string }
+export interface AjustesDF { comisionPct: number; comisionFija: number; fleteDevolucionPct: number; recargaMin: number; retiroMin: number; tarifaTienda: number; tarifaProveedor: number }
+export interface ProductoDFAdmin {
+  id: string; nombre: string; precio: number; visible: boolean; activo: boolean; proveedorId: string; costo: number; costos: Record<string, number>;
+  paquete: { largo: number; ancho: number; alto: number; peso: number; contenido: string }; variantes: string[]; importos: number;
+}
+export interface BodegaDFAdmin {
+  cuenta: { configurada: boolean; ambiente: string; clientId: string; webhook: string; verificacion: { ok: boolean; error?: string } | null };
+  ajustes: AjustesDF;
+  bodegas: { id: string; nombre: string; email: string; activo: boolean; bodega: BodegaProvDF; faltan: string[]; productos: number }[];
+  productos: ProductoDFAdmin[];
+  billeteras: { tiendas: { storeId: string; tienda: string; saldo: number; ultimo: string }[]; retiros: { id: string; storeId: string; tienda: string; monto: number; datos: string; estado: string; nota: string; fecha: string; resuelto: string }[]; enCustodia: number; todasLasTiendas: { id: string; nombre: string }[] };
+  despachos: PedidoDF[];
+  ganancia: { total: number; mes: number; guias: number; guiasMes: number };
+}
+export const apiBodegaDFAdmin = () => req<BodegaDFAdmin>('/api/superadmin/bodega-df', 'GET');
+export const apiVerificarCuentaDF = () => req<BodegaDFAdmin['cuenta']>('/api/superadmin/bodega-df/verificar', 'POST');
+export const apiAjustesDF = (a: Partial<AjustesDF>) => req<AjustesDF>('/api/superadmin/bodega-df/ajustes', 'PUT', a);
+export const apiBodegaProveedorDF = (id: string, b: Partial<BodegaProvDF>) => req<{ ok: true }>(`/api/superadmin/bodega-df/bodegas/${encodeURIComponent(id)}`, 'PUT', b);
+export const apiProductoDF = (id: string, b: Partial<Omit<ProductoDFAdmin, 'id'>>) => req<{ ok: true }>(`/api/superadmin/bodega-df/productos/${encodeURIComponent(id)}`, 'PUT', b);
+export const apiAjusteBilleteraDF = (storeId: string, monto: number, motivo: string) => req<{ ok: true; saldo: number }>('/api/superadmin/bodega-df/billetera', 'POST', { storeId, monto, motivo });
+export const apiResolverRetiroDF = (id: string, estado: 'pagado' | 'rechazado', nota: string) => req<{ ok: true }>(`/api/superadmin/bodega-df/retiros/${encodeURIComponent(id)}`, 'POST', { estado, nota });
+export const apiDespacharDFAdmin = (storeId: string, id: string) => req<{ ok: true; guia: string }>(`/api/superadmin/bodega-df/pedidos/${encodeURIComponent(storeId)}/${encodeURIComponent(id)}/despachar`, 'POST');
 export interface LibraryAdminItem {
   id: string; nombre: string; precio: number; gratis: boolean; precioImportacion: number; activo: boolean; editable: boolean; portada: string | null; importos: number;
 }

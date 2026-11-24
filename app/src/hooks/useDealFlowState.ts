@@ -50,6 +50,8 @@ import { apiEffiApiEstado, type EffiApiEstado,
   type AntibaneoEstado,
   type EstiloAsistente,
   apiExtraerPedido,
+  apiPedidoReciente,
+  apiConfirmarPedidoChat,
   apiActualizarPedido,
   apiSendLeadMedia,
   apiSendLeadMessage,
@@ -167,7 +169,7 @@ import { apiEffiApiEstado, type EffiApiEstado,
   apiToggleCupon,
   apiEliminarCupon,
 } from '../lib/api';
-import type { ClaudeIA, ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore, Campana, Brief, CopysAnuncio, CuentaAds, OpcionesAds, Suscripcion, PlanPublico, Cupon, NuevoCupon, PaqueteCreditos, MovimientoCredito, MiTienda, MetaSignupCfg, EstadoNumero, LibraryItem, LibraryAdminItem, SuperStoreProduct, EventoLog, Estadisticas, PropuestaPedido, ReporteBaneo, PlantillaMeta, NuevaPlantilla } from '../lib/api';
+import type { ClaudeIA, ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore, Campana, Brief, CopysAnuncio, CuentaAds, OpcionesAds, Suscripcion, PlanPublico, Cupon, NuevoCupon, PaqueteCreditos, MovimientoCredito, MiTienda, MetaSignupCfg, EstadoNumero, LibraryItem, LibraryAdminItem, SuperStoreProduct, EventoLog, Estadisticas, PropuestaPedido, PedidoReciente, ReporteBaneo, PlantillaMeta, NuevaPlantilla } from '../lib/api';
 import { fmt } from '../lib/format';
 import { clearSnapshot, loadSnapshot, saveSnapshot } from '../lib/persist';
 import { playOrderChime } from '../lib/sound';
@@ -1044,6 +1046,11 @@ export function useDealFlowState() {
   const ordersEnCursoRef = useRef(false);
   const apiLeadsRef = useRef(apiLeadsState);
   apiLeadsRef.current = apiLeadsState;
+  // Conversaciones ya descargadas, guardadas APARTE de la lista: si el chat se abre antes de que
+  // llegue la lista (notificación de la PWA, enlace directo) o una recarga de la lista llega sin
+  // mensajes, el chat no queda vacío (antes tocaba entrar a otro y volver).
+  const mensajesCacheRef = useRef(new Map<string, Lead['mensajes']>());
+  const pedidosMsgsRef = useRef(new Map<string, { n: number; t: number }>());
   const notifPrefsRef = useRef(notifPrefs);
   notifPrefsRef.current = notifPrefs;
 
@@ -1310,19 +1317,45 @@ export function useDealFlowState() {
   const [completarCargando, setCompletarCargando] = useState(false);
   const [completarMsg, setCompletarMsg] = useState('');
   const [completarDatos, setCompletarDatos] = useState<{ propuesta: PropuestaPedido | null; ordenExistente: { rowId: string; id: string } | null } | null>(null);
+  // Lo primero que se ve: el resumen más reciente del chat y el pedido del cliente, con el botón
+  // para confirmarlo (al instante, sin IA). La lectura con IA queda para corregir datos.
+  const [completarReciente, setCompletarReciente] = useState<PedidoReciente | null>(null);
+  const [completarLead, setCompletarLead] = useState('');
+  const [confirmandoChat, setConfirmandoChat] = useState(false);
   async function abrirCompletarPedido(leadId: number | string) {
     setCompletarAbierto(true);
+    setCompletarMsg('');
+    setCompletarDatos(null);
+    setCompletarReciente(null);
+    setCompletarLead(String(leadId));
+    setCompletarCargando(true);
+    const r = await apiPedidoReciente(String(leadId));
+    setCompletarCargando(false);
+    if (r.error || !r.data) { setCompletarMsg(r.error || 'No pudimos leer el chat.'); return; }
+    setCompletarReciente(r.data);
+  }
+  async function confirmarPedidoDesdeChat(rowId: string) {
+    setConfirmandoChat(true);
+    const r = await apiConfirmarPedidoChat(rowId);
+    setConfirmandoChat(false);
+    if (r.error) { toast(r.error, 'error'); return; }
+    toast(r.data?.yaEstaba ? 'Ese pedido ya estaba confirmado.' : 'Pedido confirmado ✓ Ya sale a despacho.', 'ok');
+    const n = await apiPedidoReciente(completarLead);
+    if (n.data) setCompletarReciente(n.data);
+    await sincronizarPedidos();
+  }
+  async function leerPedidoConIA() {
     setCompletarCargando(true);
     setCompletarMsg('');
     setCompletarDatos(null);
-    const r = await apiExtraerPedido(String(leadId));
+    const r = await apiExtraerPedido(completarLead);
     setCompletarCargando(false);
     if (r.error || !r.data) { setCompletarMsg(r.error || 'No pudimos leer el pedido del chat.'); return; }
     setCompletarDatos(r.data);
     if (!r.data.propuesta) setCompletarMsg('No encontramos datos de un pedido en esta conversación.');
     else if (!r.data.ordenExistente) setCompletarMsg('Leímos el pedido del chat, pero este cliente no tiene un pedido existente para completar. Puedes crear uno nuevo desde “Crear pedido”.');
   }
-  function cerrarCompletarPedido() { setCompletarAbierto(false); setCompletarMsg(''); setCompletarDatos(null); }
+  function cerrarCompletarPedido() { setCompletarAbierto(false); setCompletarMsg(''); setCompletarDatos(null); setCompletarReciente(null); }
   async function guardarPedidoCompletado(rowId: string, body: { cliente: string; tel?: string; departamento?: string; ciudad?: string; direccion?: string; nota?: string; envio?: number; total?: number; items: { qty: number; nombre: string; precio: number }[] }): Promise<boolean> {
     setCompletarMsg('Guardando…');
     const r = await apiActualizarPedido(rowId, body);
@@ -2065,9 +2098,14 @@ export function useDealFlowState() {
   // esos y se agregan los nuevos; el resto de la lista no se toca ni se repinta.
   function aplicarResumenLeads(leads: Lead[], parcial = false) {
     if (parcial && !leads.length) return; // nada cambió: el Inbox no se rehace
+    for (const l of leads) if (l.mensajes.length) mensajesCacheRef.current.set(String(l.id), l.mensajes);
     setApiLeadsState((prev) => {
       const antes = new Map((prev || []).map((l) => [String(l.id), l]));
-      const conMensajes = (l: Lead) => (l.mensajes.length ? l : { ...l, mensajes: antes.get(String(l.id))?.mensajes || [] });
+      const conMensajes = (l: Lead) => {
+        if (l.mensajes.length) return l;
+        const previos = antes.get(String(l.id))?.mensajes;
+        return { ...l, mensajes: previos?.length ? previos : mensajesCacheRef.current.get(String(l.id)) || [] };
+      };
       if (!parcial) return leads.map(conMensajes);
       const cambiados = new Map(leads.map((l) => [String(l.id), conMensajes(l)]));
       const res = (prev || []).map((l) => cambiados.get(String(l.id)) || l);
@@ -2177,9 +2215,24 @@ export function useDealFlowState() {
     void apiLeadMensajes(String(id)).then(({ data }) => {
       if (!data) return;
       const msgs = mapApiMensajes(data.mensajes);
+      mensajesCacheRef.current.set(String(id), msgs);
       setApiLeadsState((prev) => (prev || []).map((l) => (String(l.id) === String(id) ? { ...l, mensajes: msgs } : l)));
     });
   }
+  // Red de seguridad: si el chat abierto se ve vacío (y no es un chat sin mensajes), se
+  // vuelven a pedir sus mensajes solos: hasta 4 intentos, separados al menos 3 s.
+  useEffect(() => {
+    if (!apiMode || crmSelectedId == null) return;
+    const id = String(crmSelectedId);
+    const l = (apiLeadsState || []).find((x) => String(x.id) === id);
+    if (!l || l.mensajes.length) { if (l?.mensajes.length) pedidosMsgsRef.current.delete(id); return; }
+    const cache = mensajesCacheRef.current.get(id);
+    if (cache?.length) { setApiLeadsState((prev) => (prev || []).map((x) => (String(x.id) === id && !x.mensajes.length ? { ...x, mensajes: cache } : x))); return; }
+    const p = pedidosMsgsRef.current.get(id) || { n: 0, t: 0 };
+    if (p.n >= 4 || Date.now() - p.t < 3000) return;
+    pedidosMsgsRef.current.set(id, { n: p.n + 1, t: Date.now() });
+    cargarMensajesChat(id);
+  }, [apiMode, crmSelectedId, apiLeadsState, mobileChatOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // En modo servidor, el panel del vendedor carga WhatsApp real y los leads,
   // y refresca el CRM cada 5 s para ver los mensajes que van llegando.
@@ -4050,6 +4103,10 @@ export function useDealFlowState() {
     completarMsg,
     completarDatos,
     abrirCompletarPedido,
+    completarReciente,
+    confirmarPedidoDesdeChat,
+    confirmandoChat,
+    leerPedidoConIA,
     cerrarCompletarPedido,
     guardarPedidoCompletado,
     editarOrden,

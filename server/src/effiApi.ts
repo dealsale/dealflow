@@ -2133,6 +2133,14 @@ export function despacharEffi(storeId: string, orderId: string, reintento = fals
   const k = `${storeId}|${orderId}`;
   const enCurso = enviandoEffi.get(k);
   if (enCurso) { trazar(storeId, orderId, { etapa: 'despacho', nivel: 'warn', titulo: 'Ya se estaba enviando a Effi: no se manda dos veces' }); return enCurso; }
+  // Bodega DealFlow: sus pedidos salen con la cuenta de DealFlow, nunca solos por el Effi de la tienda.
+  if (opts.auto) {
+    try {
+      const esDF = db.prepare(`SELECT 1 FROM order_items i JOIN library_imports li ON li.product_id = i.product_id AND li.store_id = ?
+        JOIN library_products lp ON lp.id = li.library_product_id AND lp.df_activo = 1 WHERE i.order_id = ? LIMIT 1`).get(storeId, orderId);
+      if (esDF) return Promise.resolve({ error: 'Este pedido sale por la Bodega DealFlow.' });
+    } catch { /* columnas de la bodega aún no creadas */ }
+  }
   // Envío automático: si algún producto del pedido se despacha por Skydropx o Dropi, no se manda a Effi.
   if (opts.auto) {
     const pv = String((db.prepare("SELECT GROUP_CONCAT(DISTINCT COALESCE(p.despacho_proveedor,'')) pv FROM order_items i LEFT JOIN products p ON p.id = i.product_id WHERE i.order_id = ?").get(orderId) as { pv: string | null } | undefined)?.pv || '').split(',');

@@ -70,6 +70,8 @@ const horaCO = (utc: string) => { const t = Date.parse(utc.replace(' ', 'T') + (
 export function registrarPagoEnContabilidad(referencia: string): boolean {
   const p = db.prepare(`SELECT p.*, s.nombre tienda, s.correo FROM pagos p LEFT JOIN stores s ON s.id = p.store_id WHERE p.referencia = ? AND p.estado = 'aprobado'`).get(referencia) as Record<string, string | number | null> | undefined;
   if (!p || !(Number(p.monto) > 0)) return false;
+  // Recarga de la billetera de la Bodega DealFlow: es dinero de la tienda en custodia, no un ingreso.
+  if (String(p.tipo || '') === 'billetera') return false;
   const gateway = String(p.gateway || 'wompi');
   const origen = ORIGENES_PASARELA.includes(gateway) ? gateway : 'wompi';
   const ya = db.prepare(`SELECT id FROM contabilidad_movimientos WHERE referencia = ? AND origen IN (${ORIGENES_PASARELA.map(() => '?').join(',')})`).get(referencia, ...ORIGENES_PASARELA) as { id: string } | undefined;
