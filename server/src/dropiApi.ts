@@ -288,6 +288,30 @@ export interface CrearOrdenInput {
   ciudadDropi: Ciudad;
 }
 
+/**
+ * Dropi calcula el «valor a cobrar» sumando precio × cantidad de los productos. Esto deja esa
+ * suma EXACTAMENTE igual al total del pedido (en combos cada ítem traía el precio del combo y la
+ * guía salía por el triple). Reparte en proporción a los precios que traían (o en partes iguales);
+ * los pesos del redondeo van a una línea de 1 unidad (o se separa una unidad para ellos).
+ */
+export function ajustarPreciosAlTotal(prods: CrearOrdenInput['productos'], total: number): void {
+  const t = Math.round(total);
+  if (!prods.length || t <= 0) return;
+  for (const p of prods) p.quantity = Math.max(1, Math.round(p.quantity));
+  const unidades = prods.reduce((a, p) => a + p.quantity, 0);
+  const suma = prods.reduce((a, p) => a + Math.max(0, p.price) * p.quantity, 0);
+  if (suma === t) return;
+  for (const p of prods) p.price = suma > 0 ? Math.floor((Math.max(0, p.price) * t) / suma) : Math.floor(t / unidades);
+  let resto = t - prods.reduce((a, p) => a + p.price * p.quantity, 0);
+  for (const p of prods) { const k = Math.floor(resto / p.quantity); if (k > 0) { p.price += k; resto -= k * p.quantity; } }
+  if (resto <= 0) return;
+  const uno = prods.find((p) => p.quantity === 1);
+  if (uno) { uno.price += resto; return; }
+  const l = prods[0];
+  l.quantity -= 1;
+  prods.push({ ...l, quantity: 1, price: l.price + resto });
+}
+
 /** Crea la orden en Dropi, incluyendo la transportadora elegida (si se pasó). */
 export async function crearOrden(cred: DropiCred, inp: CrearOrdenInput): Promise<{ id: string } | { error: string }> {
   const payload: Record<string, unknown> = {

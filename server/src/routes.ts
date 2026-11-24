@@ -1435,6 +1435,10 @@ const dropiHelpers = {
       cotProductos.push({ id: pid, quantity: it.qty, type: tipo, variation_id: variationId });
       ordenProductos.push({ id: pid, name: it.nombre, type: tipo, variation_id: variationId, quantity: it.qty, price: precioUnit });
     }
+    // Dropi calcula el «valor a cobrar» SUMANDO precio × cantidad de los productos. En combos
+    // (3 camisillas por $139.900) cada ítem traía el precio del combo y la guía salía por
+    // $419.700. Se reparten los precios para que la suma sea EXACTAMENTE el total del pedido.
+    _dropi.ajustarPreciosAlTotal(ordenProductos, total);
     return { cotProductos, ordenProductos };
   },
 };
