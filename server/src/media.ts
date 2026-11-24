@@ -298,8 +298,42 @@ export function mimeReal(buf: Buffer): string {
     if (marca.startsWith('3g')) return 'video/3gpp';
     return 'video/mp4';
   }
+  // Videos de QuickTime viejos (cámaras, algunos celulares): no traen «ftyp», empiezan directo
+  // con otra caja (moov/mdat/wide/free…). Antes quedaban como «application/octet-stream».
+  if (/^(moov|mdat|wide|free|skip|pnot)$/.test(asc(4, 8))) return 'video/quicktime';
+  if (asc(0, 4) === 'II*\u0000' || asc(0, 4) === 'MM\u0000*') return 'image/tiff';
+  if (h[0] === 0x00 && h[1] === 0x00 && h[2] === 0x01 && h[3] === 0xba) return 'video/mpeg';
+  if (h[0] === 0x47 && buf.length > 188 && buf[188] === 0x47) return 'video/mp2t';
+  if (h[0] === 0xff && h[1] === 0x0a) return 'image/jxl';
   if (asc(0, 4) === 'PK\u0003\u0004') return 'application/zip'; // docx/xlsx/pptx también son zip: se deja el del nombre
+  // Texto: una página web guardada en lugar de la foto (enlace roto o bloqueado al importar) o un SVG.
+  const ini = buf.subarray(0, 512).toString('utf8').replace(/^﻿/, '').trimStart().toLowerCase();
+  if (ini.startsWith('<svg') || (ini.startsWith('<?xml') && ini.includes('<svg'))) return 'image/svg+xml';
+  if (ini.startsWith('<!doctype html') || ini.startsWith('<html') || ini.startsWith('<head') || ini.startsWith('<?xml')) return 'text/html';
+  if (ini.startsWith('{') || ini.startsWith('[')) return 'application/json';
   return '';
+}
+
+/**
+ * Último recurso cuando ni el nombre ni los primeros bytes dicen qué es: ffprobe (viene con
+ * ffmpeg) mira por dentro si es una foto o un video. '' si tampoco lo reconoce.
+ */
+function tipoPorFfprobe(buf: Buffer): 'image' | 'video' | '' {
+  let dir = '';
+  try {
+    dir = mkdtempSync(path.join(tmpdir(), 'df-probe-'));
+    const f = path.join(dir, 'in');
+    writeFileSync(f, buf);
+    const r = spawnSync('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=codec_name,nb_frames:format=format_name,duration', '-of', 'json', f], { timeout: 20_000 });
+    if (r.status !== 0) return '';
+    const j = JSON.parse(String(r.stdout || '{}')) as { streams?: { codec_name?: string; nb_frames?: string }[]; format?: { format_name?: string; duration?: string } };
+    const s = j.streams?.[0];
+    if (!s) return '';
+    const formato = String(j.format?.format_name || '');
+    const imagen = /image2|_pipe|png|jpeg|webp|tiff|bmp|gif/.test(formato) || /^(mjpeg|png|webp|tiff|bmp|jpegxl|svg)$/.test(String(s.codec_name || ''));
+    if (imagen && !(Number(j.format?.duration) > 0.5 && Number(s.nb_frames || 0) > 1)) return 'image';
+    return 'video';
+  } catch { return ''; } finally { if (dir) try { rmSync(dir, { recursive: true, force: true }); } catch { /* nada */ } }
 }
 
 /** Tipos que WhatsApp (Cloud API) acepta, por tipo de mensaje. */
@@ -344,6 +378,14 @@ export function prepararParaWhatsapp(media: { buffer: Buffer; mime: string; tipo
   const real = mimeReal(media.buffer);
   // El contenido manda (salvo los documentos de Office, que por dentro son un zip).
   if (real && !(real === 'application/zip' && /officedocument|msword|ms-excel|ms-powerpoint/.test(mime))) mime = real;
+  if (!media.buffer?.length) return { error: 'El archivo está vacío (se guardó mal al subirlo). Vuelve a subir la foto o el video en el producto.' };
+  if (real === 'text/html' || real === 'application/json') return { error: 'El archivo guardado no es una foto ni un video, sino una página web (el enlace de donde se importó no dejó descargar la imagen). Vuelve a subir la foto o el video en el producto.' };
+  // Tipo desconocido (sin extensión o con una rara): ffmpeg mira si es foto o video y se convierte abajo.
+  if (!real && (!mime || mime === 'application/octet-stream' || mime === 'binary/octet-stream')) {
+    const t = tipoPorFfprobe(media.buffer);
+    if (t === 'image') mime = 'image/x-desconocida';
+    else if (t === 'video') mime = 'video/x-desconocido';
+  }
   let tipo = mime.startsWith('image/') ? 'image' : mime.startsWith('video/') ? 'video' : mime.startsWith('audio/') ? 'audio' : 'document';
   const base = (nombre || 'archivo').replace(/\.[a-z0-9]{2,10}$/i, '') || 'archivo';
   if (tipo === 'image' && !WA_OK.image.test(mime)) {
@@ -353,7 +395,7 @@ export function prepararParaWhatsapp(media: { buffer: Buffer; mime: string; tipo
       if (mp4) return { buffer: mp4, mime: 'video/mp4', tipo: 'video', nombre: `${base}.mp4` };
     }
     const jpg = convertir(media.buffer, 'jpg', ['-frames:v', '1', '-q:v', '3']);
-    if (!jpg) return { error: `WhatsApp no acepta fotos en formato ${mime.split('/')[1].toUpperCase()} y no se pudo convertir a JPG.` };
+    if (!jpg) return { error: `WhatsApp no acepta fotos en formato ${/x-desconocid/.test(mime) ? 'desconocido' : mime.split('/')[1].toUpperCase()} y no se pudo convertir a JPG.` };
     return { buffer: jpg, mime: 'image/jpeg', tipo: 'image', nombre: `${base}.jpg` };
   }
   if (tipo === 'image' && media.buffer.length > LIMITE_WA.image) {
@@ -366,13 +408,14 @@ export function prepararParaWhatsapp(media: { buffer: Buffer; mime: string; tipo
     if (!WA_OK.video.test(mime) || hevc || media.buffer.length > LIMITE_WA.video) {
       const grande = media.buffer.length > LIMITE_WA.video;
       const mp4 = convertir(media.buffer, 'mp4', ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', grande ? '30' : '26', '-vf', "scale='min(1280,iw)':-2", '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '96k', '-movflags', '+faststart']);
-      if (!mp4) return { error: `WhatsApp no acepta videos en formato ${mime.split('/')[1].toUpperCase()} y no se pudo convertir a MP4.` };
+      if (!mp4) return { error: `WhatsApp no acepta videos en formato ${/x-desconocid/.test(mime) ? 'desconocido' : mime.split('/')[1].toUpperCase()} y no se pudo convertir a MP4.` };
       if (mp4.length > LIMITE_WA.video) return { error: 'El video pesa más de 16 MB, el máximo de WhatsApp. Súbelo más corto o más liviano.' };
       return { buffer: mp4, mime: 'video/mp4', tipo: 'video', nombre: `${base}.mp4` };
     }
   }
   if (tipo === 'document' && !WA_OK.document.test(mime)) {
-    return { error: `WhatsApp no acepta archivos de tipo «${mime || 'desconocido'}». Envía una foto (JPG/PNG), un video MP4 o un PDF.` };
+    if (!mime || /octet-stream/.test(mime)) return { error: `No se reconoció el archivo${nombre ? ` «${nombre}»` : ''} como foto ni como video (puede estar dañado). Vuelve a subirlo en el producto como foto JPG/PNG o video MP4.` };
+    return { error: `WhatsApp no acepta archivos de tipo «${mime}». Envía una foto (JPG/PNG), un video MP4 o un PDF.` };
   }
   if (media.buffer.length > (LIMITE_WA[tipo] || LIMITE_WA.document)) return { error: `El archivo pesa más de lo que permite WhatsApp para ${tipo === 'image' ? 'fotos (5 MB)' : tipo === 'audio' ? 'audios (16 MB)' : 'documentos (100 MB)'}.` };
   // El nombre con la extensión del formato real (un JPG llamado «.heic» confunde al celular).
