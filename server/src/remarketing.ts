@@ -110,7 +110,7 @@ function leadsTodos(storeId: string, dias = 60, pedidos = pedidosTienda(storeId)
   // Último mensaje y señales del embudo: guardados en el lead (versiones.ts), sin recorrer mensajes.
   const rows = db.prepare(`SELECT l.id, l.nombre, l.tel, l.wa_id, l.canal, l.no_contactar, l.estado_manual, l.ad_id, l.etiqueta, l.created_at,
       l.ult_cliente_at AS ult_cliente, l.ult_at, l.ult_texto, l.f_resumen_at AS resumen_at,
-      l.f_pidio AS pidio_datos, l.f_dio AS dio_datos, l.f_intencion AS intencion,
+      l.f_pidio_resp AS pidio_datos, l.f_dio AS dio_datos, l.f_intencion AS intencion,
       (SELECT MAX(enviado_at) FROM remarketing_envios r WHERE r.lead_id = l.id AND r.estado = 'enviado') AS ult_rmk
     FROM leads l WHERE l.store_id = ? AND COALESCE(l.canal,'whatsapp') = 'whatsapp'`).all(storeId) as Fila[];
   const limite = new Date(Date.now() - dias * 86400e3).toISOString().replace('T', ' ').slice(0, 19);

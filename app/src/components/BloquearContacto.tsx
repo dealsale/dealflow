@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Icono, IcoTexto } from './Icono';
+import { useEffect, useState, type CSSProperties } from 'react';
+import { Icono, IcoTexto, IconoColor } from './Icono';
 import { apiLeadBloqueo, apiLeadBloquear, apiLeadDesbloquear, type EstadoBloqueo } from '../lib/api';
 import { confirmar, notificar } from './dialogs';
 
@@ -8,7 +8,7 @@ import { confirmar, notificar } from './dialogs';
  * recordatorios, plantillas, guías) y, si Meta lo permite, el número también lo
  * bloquea, así tampoco le llega nada de otra plataforma conectada al número.
  */
-export function BloquearContacto({ leadId, compacto = false }: { leadId: string; compacto?: boolean }) {
+export function BloquearContacto({ leadId, compacto = false, enLista = false, enMenu, alTocar }: { leadId: string; compacto?: boolean; enLista?: boolean; enMenu?: CSSProperties; alTocar?: () => void }) {
   const [e, setE] = useState<EstadoBloqueo | null>(null);
   const [ocupado, setOcupado] = useState(false);
   useEffect(() => { setE(null); if (leadId) void apiLeadBloqueo(leadId).then((r) => r.data && setE(r.data)); }, [leadId]);
@@ -44,6 +44,23 @@ export function BloquearContacto({ leadId, compacto = false }: { leadId: string;
       <div onClick={() => !ocupado && void alternar()} title={titulo} style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: e.bloqueado ? '#F87171' : 'var(--df-text-faint)', fontSize: 17 }}>
         <Icono nombre="bloquear" tam={18} />
       </div>
+    );
+  }
+  if (enMenu) {
+    // Opción del menú desplegable del chat (celular): el estilo lo pone el menú.
+    return (
+      <button role="menuitem" onClick={() => { alTocar?.(); void alternar(); }} disabled={ocupado} title={titulo} style={enMenu}>
+        <IconoColor color="#F87171"><Icono nombre="bloquear" tam={17} /></IconoColor>{e.bloqueado ? 'Desbloquear contacto' : 'Bloquear contacto'}
+      </button>
+    );
+  }
+  if (enLista) {
+    // Fila del panel «Opciones» del chat.
+    return (
+      <button onClick={() => void alternar()} disabled={ocupado} title={titulo}
+        style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', background: e.bloqueado ? 'var(--df-danger)' : 'var(--df-surface)', color: e.bloqueado ? '#fff' : 'var(--df-danger)', border: `1px solid ${e.bloqueado ? 'var(--df-danger)' : 'var(--df-danger-border)'}`, borderRadius: 8, padding: '9px 11px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', textAlign: 'left', opacity: ocupado ? 0.6 : 1 }}>
+        <Icono nombre="bloquear" tam={16} />{e.bloqueado ? 'Bloqueado · toca para desbloquear' : 'Bloquear contacto'}
+      </button>
     );
   }
   return (

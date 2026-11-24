@@ -555,7 +555,7 @@ api.get('/leads/estados', requireAuth, requireStore, (req, res) => {
   // Señales del embudo guardadas en el lead (las mantiene un trigger al llegar cada mensaje).
   const rows = db.prepare(`SELECT l.id, l.nombre, l.tel, l.canal, l.asignado, l.estado_manual, l.created_at,
       l.ult_texto, l.ult_tipo, l.ult_at, l.n_msgs, (l.f_resumen_at IS NOT NULL) AS resumen,
-      l.f_pidio AS pidio_datos, l.f_dio AS dio_datos, l.f_intencion AS intencion
+      l.f_pidio_resp AS pidio_datos, l.f_dio AS dio_datos, l.f_intencion AS intencion
     FROM leads l WHERE l.store_id = ?`).all(sid) as Record<string, unknown>[];
   rows.sort((a, b) => String(b.ult_at || b.created_at).localeCompare(String(a.ult_at || a.created_at)));
   // Pedidos de la tienda en UNA consulta: por chat (lead_id) y por celular (últimos 10 dígitos).

@@ -220,6 +220,14 @@ export function frenoPedidoNuevo(storeId: string, leadId: string, tels: string[]
   // 1) Respondió un aviso del pedido con un «ok/gracias» (si pide algo nuevo, «quiero otro pack», no es acuse).
   const botAntes = msgs.slice(iCliente + 1).find((m) => m.de === 'bot');
   if (botAntes && esAvisoDePedido(botAntes.texto) && esAcuseDeRecibo(ultCliente)) return { motivo: 'aviso', pedido };
+  // 1b) La charla siguió después del aviso («entregado» → «todo perfecto, gracias» → el bot: «¡qué
+  // alegría!» → «claro que sí, mil gracias»): si TODO lo que el cliente escribió desde el último aviso
+  // son agradecimientos u «ok», tampoco es una compra nueva (DF-2823 se registró y despachó así).
+  const iAviso = msgs.findIndex((m) => m.de === 'bot' && esAvisoDePedido(m.texto));
+  if (iAviso > 0) {
+    const desdeAviso = msgs.slice(0, iAviso).filter((m) => m.de === 'cliente');
+    if (desdeAviso.length && desdeAviso.every((m) => esAcuseDeRecibo(m.texto))) return { motivo: 'aviso', pedido };
+  }
   // 2) Reclamo reciente (aunque diga «necesito solución» o «sí»): mensajes del cliente de los últimos 3 días.
   const hace3 = Date.now() - 3 * 86400e3;
   const recientes = msgs.filter((m) => m.de === 'cliente' && new Date(String(m.created_at).replace(' ', 'T') + 'Z').getTime() > hace3);

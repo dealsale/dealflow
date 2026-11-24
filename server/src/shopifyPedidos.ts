@@ -188,8 +188,11 @@ export function textoResumenPedido(storeId: string, orderId: string, modo: 'preg
 export async function resumenPedidoDelBot(storeId: string, orderId: string, leadId: string, destino: string, pn: string | undefined, idioma: 'es' | 'en'): Promise<{ confirmado: boolean }> {
   // ¿El bot mostró un resumen y el cliente respondió después? (en las últimas 6 h)
   const ult = db.prepare("SELECT de, texto FROM messages WHERE lead_id = ? AND created_at > datetime('now','-6 hours') ORDER BY created_at DESC, rowid DESC LIMIT 40").all(leadId) as { de: string; texto: string }[];
-  const iRes = ult.findIndex((m) => m.de === 'bot' && /(resumen|summary)/i.test(m.texto) && /(direcci|address|ciudad|city)/i.test(m.texto));
-  const confirmado = iRes > 0 && ult.slice(0, iRes).some((m) => m.de === 'cliente');
+  // Solo cuenta un RESUMEN DE PEDIDO de verdad («resumen de tu pedido» + productos/dirección) y un «sí»
+  // claro del cliente después. Antes bastaba cualquier mensaje con «resumen» y cualquier respuesta
+  // («gracias»): así un pedido repetido quedó confirmado y se despachó solo (DF-2823).
+  const iRes = ult.findIndex((m) => m.de === 'bot' && /(resumen de tu pedido|resumen del pedido|order summary)/i.test(m.texto) && /(direcci|address|ciudad|city)/i.test(m.texto));
+  const confirmado = iRes > 0 && ult.slice(0, iRes).some((m) => m.de === 'cliente' && esSi(m.texto) && !esNo(m.texto));
   const texto = textoResumenPedido(storeId, orderId, confirmado ? 'registrado' : 'preguntar', idioma);
   const { sendWhatsappText, marcarEnviado } = await import('./wa.js');
   const mid = uid();
@@ -454,8 +457,11 @@ export async function revisarConfirmacionesPerdidas(): Promise<number> {
     AND COALESCE(lead_id,'') != '' AND created_at > datetime('now','-7 days') LIMIT 200`).all() as { id: string; store_id: string; lead_id: string; confirmacion_at: string }[];
   let n = 0;
   for (const f of filas) {
-    const desde = f.confirmacion_at || '1970-01-01';
-    const m = db.prepare(`SELECT texto, created_at FROM messages WHERE lead_id = ? AND de = 'cliente' AND created_at >= ? ORDER BY created_at DESC, rowid DESC LIMIT 1`).get(f.lead_id, desde) as { texto: string; created_at: string } | undefined;
+    // Solo un «sí» escrito DESPUÉS de pedirle confirmación (no del mismo segundo ni de antes: un «claro que sí, gracias»
+    // a otro mensaje no confirma un pedido). Sin la hora en que se le pidió, no se adivina.
+    if (!f.confirmacion_at) continue;
+    const desde = f.confirmacion_at;
+    const m = db.prepare(`SELECT texto, created_at FROM messages WHERE lead_id = ? AND de = 'cliente' AND created_at > ? ORDER BY created_at DESC, rowid DESC LIMIT 1`).get(f.lead_id, desde) as { texto: string; created_at: string } | undefined;
     if (!m || !esSi(m.texto) || esNo(m.texto)) continue;
     // Que el sistema haya tenido tiempo de responder normal (3 min).
     if (Date.now() - new Date(m.created_at.replace(' ', 'T') + 'Z').getTime() < 3 * 60_000) continue;

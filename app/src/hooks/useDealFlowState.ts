@@ -16,7 +16,7 @@ import {
   WEBHOOK_URL,
 } from '../data';
 import { comprimirImagen, readFilesAsDataUrls } from '../components/PhotoUpload';
-import { notificar as toast } from '../components/dialogs';
+import { notificar as toast, confirmar } from '../components/dialogs';
 import { apiEffiApiEstado, type EffiApiEstado,
   apiAddVariant,
   apiGenerarVariantes,
@@ -1523,6 +1523,14 @@ export function useDealFlowState() {
         const origenProducto = po && po.color ? po : null;
         return {
           ...d,
+          // Avatar del color del producto del que vino (igual en la lista, la cabecera y el celular);
+          // sin producto, el color de siempre.
+          ...(origenProducto ? { avatarStyle: {
+            ...d.avatarStyle,
+            background: `color-mix(in srgb, ${origenProducto.color} 22%, var(--df-surface))`,
+            color: origenProducto.color,
+            boxShadow: `0 0 0 1.5px color-mix(in srgb, ${origenProducto.color} 55%, transparent), 0 0 14px -4px ${origenProducto.color}`,
+          } } : {}),
           origenProducto,
           live,
           sinResponder,
@@ -4212,6 +4220,9 @@ export function useDealFlowState() {
     },
     openMobileChat: (id: number | string) => {
       setCrmSelectedId(id);
+      setCrmSendWarn('');
+      // Sin esto el chat del celular abría vacío: los mensajes solo se pedían al tocar en escritorio.
+      if (apiMode) cargarMensajesChat(id);
       setMobileChatOpen(true);
     },
     chatVolverA,
@@ -4248,16 +4259,12 @@ export function useDealFlowState() {
       });
     },
     crmDeleteArmed,
-    requestDeleteChat: () => {
-      if (!crmDeleteArmed) {
-        setCrmDeleteArmed(true);
-        clearTimeout(crmDeleteTimer.current);
-        crmDeleteTimer.current = setTimeout(() => setCrmDeleteArmed(false), 3500);
-        return;
-      }
+    // Eliminar y reiniciar SIEMPRE preguntan en una ventana: un toque sin querer no borra nada.
+    requestDeleteChat: async () => {
+      const id = crmSelectedId;
+      if (!(await confirmar({ titulo: 'Eliminar chat', mensaje: 'Se borra este chat con todos sus mensajes. No se puede deshacer.', aceptar: 'Eliminar', peligro: true }))) return;
       clearTimeout(crmDeleteTimer.current);
       setCrmDeleteArmed(false);
-      const id = crmSelectedId;
       if (apiMode) void apiDeleteLead(String(id));
       const restantesApi = (apiLeadsState || []).filter((l) => l.id !== id);
       setApiLeadsState(apiLeadsState ? restantesApi : null);
@@ -4269,8 +4276,9 @@ export function useDealFlowState() {
       }
       setMobileChatOpen(false);
     },
-    resetChat: () => {
+    resetChat: async () => {
       const id = crmSelectedId;
+      if (!(await confirmar({ titulo: 'Reiniciar conversación', mensaje: 'Se borran los mensajes de este chat y vuelve a atenderlo el asistente desde cero. No se puede deshacer.', aceptar: 'Reiniciar', peligro: true }))) return;
       if (apiMode) void apiResetLead(String(id));
       setApiLeadsState((st) => (st || []).map((l) => (l.id === id ? { ...l, asignado: 'Asistente (bot)', etapa: 'Explorando', mensajes: [], ultimo: '', hora: '' } : l)));
       setLeads((st) => st.map((l) => (l.id === id ? { ...l, asignado: 'Asistente (bot)', mensajes: [], ultimo: '' } : l)));

@@ -1,5 +1,5 @@
 import { useId } from 'react';
-import type { CSSProperties } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import {
   Pencil, Trash2, Truck, Package, PackageCheck, PackageX, ReceiptText, MapPin, Store, TriangleAlert, CircleCheck, CircleX,
   Clock, MessageCircle, Phone, ShoppingBag, ShoppingCart, Megaphone, Image, Sparkles, Lock, Search, Copy, Link2,
@@ -95,4 +95,9 @@ export function IcoTexto({ n, tam = 14, color, degradado }: { n: NombreIcono; ta
 /** Punto de color para estados (en línea, conectado, gravedad…), en vez de los emojis 🟢 ⚪ 🔴. */
 export function Punto({ color, tam = 8 }: { color: string; tam?: number }) {
   return <span aria-hidden style={{ display: 'inline-block', width: tam, height: tam, borderRadius: '50%', background: color, marginRight: 6, verticalAlign: 'middle', flexShrink: 0 }} />;
+}
+
+/** Ícono de color con un brillo suave (como los del menú lateral), para menús de opciones. */
+export function IconoColor({ color, children }: { color: string; children: ReactNode }) {
+  return <span style={{ display: 'inline-flex', width: 18, justifyContent: 'center', flexShrink: 0, color, filter: `drop-shadow(0 0 6px color-mix(in srgb, ${color} 40%, transparent))` }}>{children}</span>;
 }

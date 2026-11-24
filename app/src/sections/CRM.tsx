@@ -1,5 +1,5 @@
 import { AutorMensaje } from '../components/AutorMensaje';
-import { Icono, IcoTexto } from '../components/Icono';
+import { Icono, IcoTexto, IconoColor } from '../components/Icono';
 import { IconoDF } from '../components/IconoDF';
 import { PresenciaChat, PresenciaEnLista } from '../components/PresenciaChat';
 import { ymdCO } from '../lib/fechaCO';
@@ -9,9 +9,8 @@ import { apiAnuncioProducto, apiVincularAnuncio, plantillaPideDatos, type Planti
 import { LlenarPlantilla } from '../components/LlenarPlantilla';
 import { CargandoChat } from '../components/CargandoChat';
 import { urlDe, useRecordado } from '../lib/rutas';
-import { AvatarCanal, ChipsCanal, canalDe, nombreCanal } from '../components/CanalChat';
+import { AvatarCanal, ChipsCanal, canalDe } from '../components/CanalChat';
 import { EtiquetaProductoChat } from '../components/ColorChat';
-import { OrigenBadge } from '../components/OrigenPedido';
 import { useVentana24h, BarraVentanaCerrada, AvisoVentana } from '../components/Ventana24h';
 import { useEffect, useRef, useState } from 'react';
 import { AttachButton, MediaContent } from '../components/MediaBubble';
@@ -164,6 +163,11 @@ export function FlujosButton({ df, size = 40 }: { df: DealFlowState; size?: numb
   );
 }
 
+/** Etiqueta pequeña de la cabecera del chat (canal, en vivo, quién atiende). */
+const chipCab: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999, border: '1px solid var(--df-border)', background: 'var(--df-surface)', whiteSpace: 'nowrap' };
+/** Botón de una fila del panel de opciones del chat. */
+const btnOpcion: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 9, width: '100%', minHeight: 36, background: 'transparent', border: 'none', color: 'var(--df-text-body)', borderRadius: 8, padding: '0 10px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer', textAlign: 'left' };
+
 const NOMBRE_SECCION: Partial<Record<string, string>> = { leads: 'Leads', pedidos: 'Pedidos', logistica: 'Logística', comentarios: 'Comentarios', resumen: 'Resumen', estadisticas: 'Estadísticas', anuncios: 'Anuncios' };
 
 export function CRM({ df }: { df: DealFlowState }) {
@@ -266,8 +270,15 @@ export function CRM({ df }: { df: DealFlowState }) {
       <div style={{ marginBottom: 12 }}><ChipsCanal conteo={conteoCanal} valor={canal} onChange={setCanal} /></div>
 
       {/* Todos los filtros en una sola fila compacta: búsqueda + menús desplegables. */}
-      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 14 }}>
-        <SearchInput value={busca} onChange={setBusca} placeholder="Buscar por nombre o teléfono…" width={240} />
+      {/* Pantallas angostas: los filtros NO se parten en dos filas; se deslizan de lado (también
+          con la rueda del mouse). El buscador se encoge y los botones de la derecha se quedan quietos. */}
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 14, minWidth: 0 }}>
+        <div style={{ flex: '0 1 240px', minWidth: 150 }}><SearchInput value={busca} onChange={setBusca} placeholder="Buscar nombre o teléfono…" width="100%" /></div>
+        <div
+          className="df-filtros-desliza"
+          onWheel={(e) => { const el = e.currentTarget; if (el.scrollWidth > el.clientWidth && Math.abs(e.deltaY) > Math.abs(e.deltaX)) el.scrollLeft += e.deltaY; }}
+          style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'nowrap', overflowX: 'auto', overflowY: 'hidden', flex: 1, minWidth: 0, scrollbarWidth: 'none', padding: '2px 0' }}
+        >
         <FilterSelect
           label="Etiqueta"
           value={filtroEtiqueta}
@@ -300,7 +311,7 @@ export function CRM({ df }: { df: DealFlowState }) {
         />
         {(canal || atiende || procedencia || filtroEtiqueta || rangoFecha !== 'Todas' || busca) && (
           <button type="button" onClick={() => { setCanal(''); setAtiende(''); setProcedencia(''); setFiltroEtiqueta(''); setRangoFecha('Todas'); setDesde(''); setHasta(''); setBusca(''); }}
-            style={{ background: 'transparent', border: 'none', color: 'var(--df-text-muted)', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}>Limpiar filtros</button>
+            style={{ background: 'transparent', border: 'none', color: 'var(--df-text-muted)', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', textDecoration: 'underline', whiteSpace: 'nowrap', flexShrink: 0 }}>Limpiar filtros</button>
         )}
         {custom && (
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -311,17 +322,19 @@ export function CRM({ df }: { df: DealFlowState }) {
               style={{ border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 9px', fontFamily: 'inherit', fontSize: 12.5, color: 'var(--df-text-body)' }} />
           </div>
         )}
-        <div style={{ flex: 1 }} />
-        {df.puede('iniciar_conversacion') && <IniciarConversacion onAbrirChat={(id) => df.abrirChat(id)} />}
-        {/* Registro GENERAL de la tienda (todos los chats). El de un chat puntual está dentro del chat. */}
+        </div>
+        <div style={{ flexShrink: 0 }}>{df.puede('iniciar_conversacion') && <IniciarConversacion onAbrirChat={(id) => df.abrirChat(id)} />}</div>
+        {/* Registro GENERAL de la tienda (todos los chats). El de un chat puntual está en «Opciones» del chat. */}
         <button
           onClick={() => df.abrirLogs()}
-          title="Ver el registro de actividad y errores de toda la tienda"
-          style={{ background: 'transparent', border: 'none', color: 'var(--df-text-faint)', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 6px' }}
+          title="Registro general: actividad y errores de toda la tienda"
+          aria-label="Registro general"
+          style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 999, color: 'var(--df-text-muted)', fontFamily: 'inherit', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 34, height: 34, padding: 0, flexShrink: 0 }}
         >
-          <Icono nombre="registro" tam={14} />Registro general
+          <Icono nombre="registro" tam={15} />
         </button>
       </div>
+      <style>{`.df-filtros-desliza::-webkit-scrollbar{display:none}.df-filtros-desliza>*{flex-shrink:0}`}</style>
 
       <ActivityLog df={df} />
 
@@ -373,45 +386,29 @@ export function CRM({ df }: { df: DealFlowState }) {
                 onClick={() => setPanelCliente((v) => !v)}
                 title="Ver información del cliente"
                 className="df-row-hover"
-                style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', borderRadius: 8, padding: '4px 6px', margin: '-4px -6px' }}
+                style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', borderRadius: 8, padding: '4px 6px', margin: '-4px -6px', flex: 1, minWidth: 0 }}
               >
                 <AvatarCanal avatarStyle={chat.avatarStyle} iniciales={chat.iniciales} canal={canalDe(chat)} />
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}>{chat.nombre} <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--df-text-muted)', display: 'inline-flex', alignItems: 'center', gap: 4 }}><OrigenBadge origen={canalDe(chat)} size={14} />{nombreCanal(canalDe(chat))}</span></div>
-                  <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11.5, color: 'var(--df-text-muted)', display: 'flex', alignItems: 'center', gap: 8 }}>{chat.tel}{chat.origenProducto && <EtiquetaProductoChat color={chat.origenProducto.color} nombre={chat.origenProducto.nombre} />}</div>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ fontWeight: 700, fontSize: 14, display: 'flex', alignItems: 'baseline', gap: 8, minWidth: 0 }}>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{chat.nombre}</span>
+                    <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11.5, fontWeight: 500, color: 'var(--df-text-muted)', whiteSpace: 'nowrap', flexShrink: 0 }}>{chat.tel}</span>
+                  </div>
+                  {/* Todo lo que describe el chat en UNA fila (no se parte en varias líneas cuando el
+                      chat es angosto): el producto se corta con «…» y el resto no se encoge. */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap', overflow: 'hidden', marginTop: 4, minWidth: 0 }}>
+                    <span title={`${chat.liveLabel} · atiende ${chat.asignado}`} style={{ ...chipCab, flexShrink: 0, color: chat.live ? 'var(--df-brand-dark)' : 'var(--df-text-muted)' }}><span style={chat.liveDot} />{chat.liveLabel}{chat.asignado ? <span style={{ fontWeight: 500, opacity: 0.85 }}>· {chat.asignado}</span> : null}</span>
+                    {chat.etiquetaStyle && <span style={{ ...chat.etiquetaStyle, flexShrink: 0, whiteSpace: 'nowrap' }}>{chat.etiqueta}</span>}
+                    {chat.origenProducto && <EtiquetaProductoChat color={chat.origenProducto.color} nombre={chat.origenProducto.nombre} />}
+                  </div>
                 </div>
-                <span style={{ fontSize: 10, color: 'var(--df-text-faint)', transform: panelCliente ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}>▾</span>
               </div>
-              <div style={chat.liveStyle}>
-                <span style={chat.liveDot} />
-                <span>{chat.liveLabel}</span>
-              </div>
-              <div style={{ flex: 1 }} />
               <button
-                onClick={() => df.abrirLogs(String(chat.id), chat.nombre)}
-                title="Ver el registro de actividad de ESTE chat"
-                style={{ background: 'var(--df-surface)', color: 'var(--df-text-secondary)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                onClick={() => setPanelCliente((v) => !v)}
+                title="Registro, bloquear, reiniciar, eliminar, crear pedido y más"
+                style={{ background: panelCliente ? 'var(--df-brand-subtle)' : 'var(--df-surface)', color: panelCliente ? 'var(--df-brand-dark)' : 'var(--df-text-secondary)', border: `1px solid ${panelCliente ? 'var(--df-brand-border)' : 'var(--df-border)'}`, borderRadius: 8, padding: '7px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
               >
-                <IcoTexto n="registro" />Registro
-              </button>
-              <BloquearContacto leadId={String(chat.id)} />
-              <button
-                onClick={df.resetChat}
-                title="Borra el historial y devuelve el chat al asistente"
-                style={{ background: 'var(--df-surface)', color: 'var(--df-text-muted)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' }}
-              >
-                Reiniciar
-              </button>
-              <button
-                onClick={df.requestDeleteChat}
-                title="Elimina este chat por completo"
-                style={
-                  df.crmDeleteArmed
-                    ? { background: 'var(--df-danger)', color: '#fff', border: '1px solid var(--df-danger)', borderRadius: 8, padding: '7px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', whiteSpace: 'nowrap' }
-                    : { background: 'var(--df-surface)', color: 'var(--df-danger)', border: '1px solid var(--df-danger-border)', borderRadius: 8, padding: '7px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', whiteSpace: 'nowrap' }
-                }
-              >
-                {df.crmDeleteArmed ? '¿Seguro? Sí, eliminar' : 'Eliminar'}
+                ⋯ Opciones
               </button>
             </div>
 
@@ -472,7 +469,7 @@ export function CRM({ df }: { df: DealFlowState }) {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                   <span style={{ color: 'var(--df-text-muted)', fontSize: 13, flex: 1 }}>El asistente está atendiendo este chat.</span>
                   <button
-                    onClick={df.intervene}
+                    onClick={df.intervene} className="df-btn-primary"
                     style={{ background: '#0F172A', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 16px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
                   >
                     Intervenir yo
@@ -526,7 +523,7 @@ export function CRM({ df }: { df: DealFlowState }) {
               <div style={{ position: 'absolute', top: 0, right: 0, width: 280, zIndex: 25, minWidth: 0, background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, boxShadow: '0 20px 50px -15px rgba(0,0,0,.35)', display: 'flex', flexDirection: 'column', gap: 16, padding: 16, height: 'min(70vh, 620px)', overflowY: 'auto' }}>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', marginBottom: 10 }}>
-                <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--df-text-muted)', letterSpacing: '.05em', textTransform: 'uppercase' }}>Información del cliente</div>
+                <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--df-text-muted)', letterSpacing: '.05em', textTransform: 'uppercase' }}>Opciones del chat</div>
                 <div style={{ flex: 1 }} />
                 <span onClick={() => setPanelCliente(false)} title="Cerrar" style={{ cursor: 'pointer', color: 'var(--df-text-faint)', fontSize: 15, lineHeight: 1 }}>✕</span>
               </div>
@@ -554,29 +551,29 @@ export function CRM({ df }: { df: DealFlowState }) {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
                 <button
                   onClick={() => { df.setOrderQuery(chat.tel); df.go('pedidos'); }}
-                  style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--df-surface)', border: '1px solid var(--df-border)', color: 'var(--df-text-body)', borderRadius: 8, padding: '9px 11px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', textAlign: 'left' }}
+                  style={btnOpcion}
                 >
-                  <Icono nombre="carrito" tam={16} />Ver pedidos de este cliente
+                  <IconoColor color="#60A5FA"><Icono nombre="paquete" tam={16} /></IconoColor>Ver pedidos de este cliente
                 </button>
                 <button
                   onClick={() => df.abrirCrearPedido({ cliente: chat.nombre, tel: chat.tel }, chat.id)}
-                  style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--df-surface)', border: '1px solid var(--df-border)', color: 'var(--df-text-body)', borderRadius: 8, padding: '9px 11px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', textAlign: 'left' }}
+                  style={btnOpcion}
                 >
-                  <Icono nombre="guia" tam={16} />Crear pedido para él/ella
+                  <IconoColor color="#FBBF24"><Icono nombre="carrito" tam={16} /></IconoColor>Crear pedido para él/ella
                 </button>
                 <button
                   onClick={() => { setPanelCliente(false); df.abrirCompletarPedido(chat.id); }}
                   title="Lee el pedido de este chat con IA y completa/corrige el pedido existente"
-                  style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--df-surface)', border: '1px solid var(--df-border)', color: 'var(--df-text-body)', borderRadius: 8, padding: '9px 11px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', textAlign: 'left' }}
+                  style={btnOpcion}
                 >
-                  <Icono nombre="ok" tam={16} />Completar pedido desde el chat
+                  <IconoColor color="#34D399"><Icono nombre="ia" tam={16} /></IconoColor>Completar pedido desde el chat
                 </button>
                 <button
                   onClick={() => df.setLeadOptin(chat.id, !df.crmOptin)}
                   title="Marca si este cliente aceptó recibir promociones. Sirve para saber a quién puedes escribirle con ofertas sin generar reportes."
-                  style={{ display: 'flex', alignItems: 'center', gap: 8, background: df.crmOptin ? 'var(--df-brand-soft, rgba(52,211,153,.12))' : 'var(--df-surface)', border: `1px solid ${df.crmOptin ? 'var(--df-brand)' : 'var(--df-border)'}`, color: 'var(--df-text-body)', borderRadius: 8, padding: '9px 11px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', textAlign: 'left' }}
+                  style={{ ...btnOpcion, background: df.crmOptin ? 'var(--df-brand-soft, rgba(52,211,153,.12))' : 'transparent' }}
                 >
-                  <Icono nombre={df.crmOptin ? 'notificacion' : 'silenciado'} tam={16} />{df.crmOptin ? 'Acepta promociones (opt-in ✓)' : 'Sin opt-in de promociones'}
+                  <IconoColor color="#F472B6"><Icono nombre={df.crmOptin ? 'notificacion' : 'silenciado'} tam={16} /></IconoColor>{df.crmOptin ? 'Acepta promociones (opt-in ✓)' : 'Sin opt-in de promociones'}
                 </button>
               </div>
               <div style={{ marginTop: 8 }}>
@@ -588,6 +585,23 @@ export function CRM({ df }: { df: DealFlowState }) {
                   options={df.team.map((m) => ({ value: m.nombre, label: m.nombre }))}
                   placeholder={chat.asignado}
                 />
+              </div>
+            </div>
+
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--df-text-muted)', letterSpacing: '.05em', textTransform: 'uppercase', marginBottom: 8 }}>Este chat</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                <button onClick={() => { setPanelCliente(false); df.abrirLogs(String(chat.id), chat.nombre); }} title="Mensajes enviados, respuestas y errores de este chat" style={btnOpcion}>
+                  <IconoColor color="#A78BFA"><Icono nombre="registro" tam={16} /></IconoColor>Ver registro del chat
+                </button>
+                <div style={{ height: 1, background: 'var(--df-border)', margin: '2px 4px' }} />
+                <BloquearContacto leadId={String(chat.id)} enMenu={btnOpcion} alTocar={() => setPanelCliente(false)} />
+                <button onClick={() => { setPanelCliente(false); void df.resetChat(); }} title="Borra el historial y devuelve el chat al asistente (pregunta antes)" style={btnOpcion}>
+                  <IconoColor color="#FB923C"><Icono nombre="actualizar" tam={16} /></IconoColor>Reiniciar conversación
+                </button>
+                <button onClick={() => { setPanelCliente(false); void df.requestDeleteChat(); }} title="Elimina este chat por completo (pregunta antes)" style={{ ...btnOpcion, color: 'var(--df-danger)' }}>
+                  <IconoColor color="#F87171"><Icono nombre="eliminar" tam={16} /></IconoColor>Eliminar chat
+                </button>
               </div>
             </div>
 

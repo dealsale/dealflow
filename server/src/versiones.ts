@@ -120,6 +120,14 @@ for (const col of ['visto_equipo_at TEXT', "ult_at TEXT", "ult_de TEXT NOT NULL 
   'f_pidio INTEGER NOT NULL DEFAULT 0', 'f_dio INTEGER NOT NULL DEFAULT 0', 'f_intencion INTEGER NOT NULL DEFAULT 0', 'res_ok INTEGER NOT NULL DEFAULT 0']) {
   try { db.exec(`ALTER TABLE leads ADD COLUMN ${col}`); } catch { /* ya existe */ }
 }
+// «Faltan datos» solo si el CLIENTE respondió después de que le pedimos los datos (f_pidio_resp)
+// o si dio alguno (f_dio). Antes bastaba con que un mensaje nuestro dijera «dirección» o «ciudad»:
+// el mensaje inicial y el remarketing dejaban en «Faltan datos» a quien nunca contestó.
+try {
+  db.exec('ALTER TABLE leads ADD COLUMN f_pidio_resp INTEGER NOT NULL DEFAULT 0');
+  // Columna nueva: los chats a los que ya se les pidieron datos se recalculan de a poco (iniciarResumenLeads).
+  db.exec('UPDATE leads SET res_ok = 0 WHERE f_pidio = 1');
+} catch { /* ya existe */ }
 db.exec('CREATE INDEX IF NOT EXISTS idx_leads_ult_at ON leads(ult_at)');
 db.exec('CREATE INDEX IF NOT EXISTS idx_leads_store_res ON leads(store_id, res_ok)');
 db.exec(`DROP TRIGGER IF EXISTS trg_messages_resumen;
@@ -135,6 +143,7 @@ CREATE TRIGGER trg_messages_resumen AFTER INSERT ON messages BEGIN
     n_cliente = n_cliente + CASE WHEN NEW.de = 'cliente' THEN 1 ELSE 0 END,
     f_resumen_at = CASE WHEN NEW.de != 'cliente' AND ${ES_RESUMEN('NEW.texto')} AND NEW.created_at >= COALESCE(f_resumen_at,'') THEN NEW.created_at ELSE f_resumen_at END,
     f_pidio = CASE WHEN f_pidio = 1 OR (NEW.de != 'cliente' AND ${likeCol('NEW.texto', PATRONES_LEAD.PIDE_DATOS)}) THEN 1 ELSE 0 END,
+    f_pidio_resp = CASE WHEN f_pidio_resp = 1 OR (NEW.de = 'cliente' AND f_pidio = 1) THEN 1 ELSE 0 END,
     f_dio = CASE WHEN f_dio = 1 OR (NEW.de = 'cliente' AND ${likeCol('NEW.texto', PATRONES_LEAD.DIO_DATOS)}) THEN 1 ELSE 0 END,
     f_intencion = CASE WHEN f_intencion = 1 OR (NEW.de = 'cliente' AND ${likeCol('NEW.texto', PATRONES_LEAD.INTENCION)}) THEN 1 ELSE 0 END
   WHERE id = NEW.lead_id;
@@ -166,6 +175,8 @@ export function completarResumenLeads(lote = 400): number {
       n_cliente = (SELECT COUNT(*) FROM messages m WHERE m.lead_id = leads.id AND m.de = 'cliente'),
       f_resumen_at = (SELECT MAX(created_at) FROM messages m WHERE m.lead_id = leads.id AND m.de != 'cliente' AND ${ES_RESUMEN('m.texto')}),
       f_pidio = EXISTS(SELECT 1 FROM messages m WHERE m.lead_id = leads.id AND m.de != 'cliente' AND ${likeCol('m.texto', PATRONES_LEAD.PIDE_DATOS)}),
+      f_pidio_resp = EXISTS(SELECT 1 FROM messages c WHERE c.lead_id = leads.id AND c.de = 'cliente' AND c.created_at > (
+        SELECT MIN(m.created_at) FROM messages m WHERE m.lead_id = leads.id AND m.de != 'cliente' AND ${likeCol('m.texto', PATRONES_LEAD.PIDE_DATOS)})),
       f_dio = EXISTS(SELECT 1 FROM messages m WHERE m.lead_id = leads.id AND m.de = 'cliente' AND ${likeCol('m.texto', PATRONES_LEAD.DIO_DATOS)}),
       f_intencion = EXISTS(SELECT 1 FROM messages m WHERE m.lead_id = leads.id AND m.de = 'cliente' AND ${likeCol('m.texto', PATRONES_LEAD.INTENCION)}),
       res_ok = 1

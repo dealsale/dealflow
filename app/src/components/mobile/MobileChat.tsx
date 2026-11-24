@@ -1,9 +1,11 @@
 import { AutorMensaje } from '../AutorMensaje';
-import { Icono, IcoTexto } from '../Icono';
+import { Icono, IcoTexto, IconoColor } from '../Icono';
 import { useVentana24h, BarraVentanaCerrada, AvisoVentana } from '../Ventana24h';
 import { CargandoChat } from '../CargandoChat';
 import { BloquearContacto } from '../BloquearContacto';
-import { useEffect, useRef } from 'react';
+import { AvatarCanal, canalDe } from '../CanalChat';
+import { EtiquetaProductoChat } from '../ColorChat';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { AttachButton, MediaContent } from '../MediaBubble';
 import { VoiceRecorder } from '../VoiceRecorder';
 import { ActivityLog } from '../ActivityLog';
@@ -12,7 +14,11 @@ import { CajaMensaje } from '../CajaMensaje';
 import { PresenciaChat } from '../PresenciaChat';
 import type { DealFlowState } from '../../hooks/useDealFlowState';
 
+/** Fila del menú desplegable del chat: alta y ancha para tocarla con el dedo sin errores. */
+const filaMenu: CSSProperties = { display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 44, padding: '0 12px', background: 'transparent', border: 'none', borderRadius: 8, color: 'var(--df-text-body)', fontFamily: 'inherit', fontSize: 14, fontWeight: 600, textAlign: 'left', cursor: 'pointer' };
+
 export function MobileChat({ df }: { df: DealFlowState }) {
+  const [menu, setMenu] = useState(false);
   const chat = df.crmChat;
   const ventana = useVentana24h(chat);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -44,53 +50,57 @@ export function MobileChat({ df }: { df: DealFlowState }) {
             <path d="M15 5l-7 7 7 7"></path>
           </svg>
         </div>
-        <div style={chat.avatarStyle}>{chat.iniciales}</div>
+        {/* Avatar del color del producto del que vino, con el ícono del canal (WhatsApp, Instagram…). */}
+        <div style={{ alignSelf: 'center' }}><AvatarCanal avatarStyle={chat.avatarStyle} iniciales={chat.iniciales} canal={canalDe(chat)} /></div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 700, fontSize: 14.5 }}>{chat.nombre}</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, color: 'var(--df-text-faint)' }}>
-            <span style={chat.liveDot} />
-            {chat.liveLabel} · atiende {chat.asignado}
+          <div style={{ fontWeight: 700, fontSize: 14.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{chat.nombre}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, color: 'var(--df-text-faint)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <span style={{ ...chat.liveDot, flexShrink: 0 }} />
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{chat.liveLabel} · {chat.asignado}</span>
           </div>
+          {/* El producto del que vino el chat, con su color. */}
+          {chat.origenProducto && (
+            <div style={{ display: 'flex', marginTop: 3, minWidth: 0 }}>
+              <EtiquetaProductoChat color={chat.origenProducto.color} nombre={chat.origenProducto.nombre} />
+            </div>
+          )}
         </div>
-        <div
-          onClick={() => df.abrirCompletarPedido(chat.id)}
-          title="Completar pedido desde el chat"
-          style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--df-brand-dark)', fontSize: 18 }}
-        >
-          <Icono nombre="guia" tam={19} />
-        </div>
-        <div
-          onClick={() => df.abrirLogs(String(chat.id), chat.nombre)}
-          title="Registro de actividad de este chat"
-          style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--df-text-faint)', fontSize: 18 }}
-        >
-          <Icono nombre="registro" tam={19} />
-        </div>
-        <BloquearContacto leadId={String(chat.id)} compacto />
-        <div
-          onClick={df.resetChat}
-          title="Reiniciar la conversación"
-          style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--df-text-faint)' }}
-        >
-          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-            <path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" />
-          </svg>
-        </div>
-        <div
-          onClick={df.requestDeleteChat}
-          title="Eliminar este chat"
-          style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: df.crmDeleteArmed ? '#F87171' : 'var(--df-text-faint)' }}
-        >
-          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-            <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
-          </svg>
+        {/* Todas las acciones en UN menú desplegable (antes eran 5 íconos sueltos y un toque sin
+            querer reiniciaba o borraba el chat). */}
+        <div style={{ position: 'relative', flexShrink: 0 }}>
+          <button
+            onClick={() => setMenu((v) => !v)}
+            aria-label="Opciones del chat" aria-haspopup="menu" aria-expanded={menu}
+            style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: menu ? 'rgba(255,255,255,.12)' : 'transparent', border: 'none', borderRadius: 10, color: '#fff', fontSize: 22, lineHeight: 1, fontFamily: 'inherit' }}
+          >
+            ⋮
+          </button>
+          {menu && (
+            <>
+              <div onClick={() => setMenu(false)} style={{ position: 'fixed', inset: 0, zIndex: 60 }} />
+              <div role="menu" className="df-pop" style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 61, width: 250, maxWidth: 'calc(100vw - 24px)', background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, boxShadow: '0 20px 50px -12px rgba(0,0,0,.55)', padding: 6, color: 'var(--df-text-body)' }}>
+                <button role="menuitem" style={filaMenu} onClick={() => { setMenu(false); df.abrirCompletarPedido(chat.id); }}>
+                  <IconoColor color="#34D399"><Icono nombre="ia" tam={17} /></IconoColor>Completar pedido desde el chat
+                </button>
+                <button role="menuitem" style={filaMenu} onClick={() => { setMenu(false); df.abrirCrearPedido({ cliente: chat.nombre, tel: chat.tel }, chat.id); }}>
+                  <IconoColor color="#FBBF24"><Icono nombre="carrito" tam={17} /></IconoColor>Crear pedido para este cliente
+                </button>
+                <button role="menuitem" style={filaMenu} onClick={() => { setMenu(false); df.abrirLogs(String(chat.id), chat.nombre); }}>
+                  <IconoColor color="#A78BFA"><Icono nombre="registro" tam={17} /></IconoColor>Ver registro del chat
+                </button>
+                <div style={{ height: 1, background: 'var(--df-border)', margin: '6px 4px' }} />
+                <BloquearContacto leadId={String(chat.id)} enMenu={filaMenu} alTocar={() => setMenu(false)} />
+                <button role="menuitem" style={filaMenu} onClick={() => { setMenu(false); void df.resetChat(); }}>
+                  <IconoColor color="#FB923C"><Icono nombre="actualizar" tam={17} /></IconoColor>Reiniciar conversación
+                </button>
+                <button role="menuitem" style={{ ...filaMenu, color: 'var(--df-danger)' }} onClick={() => { setMenu(false); void df.requestDeleteChat(); }}>
+                  <IconoColor color="#F87171"><Icono nombre="eliminar" tam={17} /></IconoColor>Eliminar chat
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
-      {df.crmDeleteArmed && (
-        <div style={{ background: 'var(--df-danger-subtle)', color: 'var(--df-danger)', fontSize: 13, fontWeight: 600, textAlign: 'center', padding: '8px 14px' }} onClick={df.requestDeleteChat}>
-          Toca de nuevo la papelera para eliminar este chat
-        </div>
-      )}
 
       <div ref={scrollRef} translate="no" style={{ flex: 1, overflowY: 'auto', padding: '16px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
         {chat.anuncio && (chat.anuncio.titular || chat.anuncio.id || chat.anuncio.url) && <AnuncioCard anuncio={chat.anuncio} productos={df.flujoProductos} />}
@@ -143,7 +153,7 @@ export function MobileChat({ df }: { df: DealFlowState }) {
       <div style={{ padding: '12px 14px', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 20px)', borderTop: '1px solid var(--df-border)', background: 'var(--df-surface)' }}>
         {df.crmNotIntervening && (
           <button
-            onClick={df.intervene}
+            onClick={df.intervene} className="df-btn-primary"
             style={{ width: '100%', background: '#0F172A', color: '#fff', border: 'none', borderRadius: 12, padding: 14, fontFamily: 'inherit', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}
           >
             Intervenir yo en este chat
