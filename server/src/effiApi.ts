@@ -1015,12 +1015,15 @@ export async function resolverUbicacion(apiKey: string, departamento: string, ci
 
 async function resolverUbicacionEffi(apiKey: string, departamento: string, ciudad: string): Promise<{ provincia: string; ciudad: string; nombre: string } | { error: string }> {
   const nc = norm(ciudad).replace(/\b(d c|dc|distrito capital)\b/g, '').trim();
-  let nd = norm(departamento).replace(/\b(departamento|depto|de)\b/g, ' ').replace(/\s+/g, ' ').trim();
+  // El departamento se compara sin «de/del/departamento» en LOS DOS lados: antes se quitaba solo en el del
+  // pedido y «Norte de Santander» («norte santander») nunca casaba con el de Effi («norte de santander»).
+  const llaveDepto = (s: string) => norm(s).replace(/\b(departamento|depto|dpto|de|del)\b/g, ' ').replace(/\s+/g, ' ').trim();
+  let nd = llaveDepto(departamento);
   if (!nd && /bogota/.test(nc)) nd = 'bogota';
   const provs = await provincias(apiKey);
   if (!provs.length) return { error: 'Effi no respondió la lista de departamentos. No es un error de la dirección: intenta en unos minutos.' };
   const candProv = nd
-    ? provs.filter((p) => norm(p.nombre) === nd).concat(provs.filter((p) => norm(p.nombre) !== nd && (norm(p.nombre).includes(nd) || nd.includes(norm(p.nombre)))))
+    ? provs.filter((p) => llaveDepto(p.nombre) === nd).concat(provs.filter((p) => llaveDepto(p.nombre) !== nd && (llaveDepto(p.nombre).includes(nd) || nd.includes(llaveDepto(p.nombre)))))
     : [];
   // Sin departamento claro: buscamos la ciudad por nombre en todo el país.
   const buscarEn = candProv.length ? candProv : [];
@@ -1034,7 +1037,13 @@ async function resolverUbicacionEffi(apiKey: string, departamento: string, ciuda
   const r = await effi<Fila[]>(apiKey, 'GET', '/api/ciudad', { query: { nombre: ciudad.trim().slice(0, 40), por_pagina: 100 } });
   if (r.ok) guardarGeo('ciudad', (r.body.data || []).map((c) => ({ id: txt(c.id), nombre: txt(c.nombre), provincia: txt(c.provincia) })));
   const todas: Fila[] = r.ok ? (r.body.data || []) : geoGuardado('ciudad').filter((c) => norm(c.nombre) === nc);
-  const exactas = todas.filter((c) => norm(txt(c.nombre)) === nc);
+  let exactas = todas.filter((c) => norm(txt(c.nombre)) === nc);
+  // Mismo nombre en varios departamentos (Villa del Rosario: municipio en Norte de Santander y veredas en
+  // Chocó y Valle): se queda la del departamento del pedido.
+  if (exactas.length > 1 && nd) {
+    const delDepto = exactas.filter((c) => { const pv = provs.find((p) => p.id === txt(c.provincia)); const k = llaveDepto(pv?.nombre || txt(c.nombre_provincia)); return !!k && (k === nd || k.includes(nd) || nd.includes(k)); });
+    if (delDepto.length === 1) exactas = delDepto;
+  }
   if (exactas.length === 1) {
     const c = exactas[0];
     const pv = provs.find((p) => p.id === txt(c.provincia));
