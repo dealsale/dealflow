@@ -57,6 +57,10 @@ export function tokenWebhookDF(): string {
   const s = String(process.env.SKYDROPX_DF_CLIENT_SECRET || '').trim();
   return s ? createHash('sha256').update('df-webhook:' + s).digest('hex').slice(0, 40) : '';
 }
+/** Los envíos con la cuenta de DealFlow se muestran como «DealFlow Envíos» (nunca Skydropx). */
+export const sinMarca = (s: string) => String(s || '').replace(/Skydropx/g, 'DealFlow Envíos');
+const marcaPedido = (o: Fila) => (txt(o.despacho_proveedor) === 'bodega_df' ? 'DealFlow Envíos' : 'Skydropx');
+const sinMarcaSi = (o: Fila, s: string) => (txt(o.despacho_proveedor) === 'bodega_df' ? sinMarca(s) : s);
 /** Cuenta con la que se maneja el envío de un pedido: la de DealFlow si salió por la bodega. */
 function cuentaDelPedido(storeId: string, orderId: string): { cuenta: string; c: CfgSky | null } {
   const o = db.prepare('SELECT despacho_proveedor FROM orders WHERE id = ? AND store_id = ?').get(orderId, storeId) as { despacho_proveedor: string } | undefined;
@@ -577,7 +581,7 @@ export async function crearEnvioSkydropx(storeId: string, orderId: string, tarif
   const datos = leerEnvio(r.body);
   db.prepare("UPDATE orders SET skydropx_envio = ?, despacho_proveedor = ?, transportadora = ?, woo_id = '', estado_woo = ?, dropi_order_id = '', guia = ?, guia_url = ?, bodega_id = ?, guia_proveedor = '' WHERE id = ?")
     .run(envioId, df ? 'bodega_df' : 'skydropx', corta(datos.transportadora || tarifa.transportadora, 60), datos.estadoTexto || 'Creando guía', datos.guia, datos.labelUrl, ori.proveedorId, orderId);
-  registrarLog(storeId, 'info', 'despacho', `DF-${txt(o.numero)} enviado ${df ? 'por la Bodega DealFlow' : 'a Skydropx'} por ${tarifa.transportadora}${datos.guia ? ` · guía ${datos.guia}` : ''}.`);
+  registrarLog(storeId, 'info', 'despacho', `DF-${txt(o.numero)} enviado ${df ? 'con DealFlow Envíos' : 'a Skydropx'} por ${tarifa.transportadora}${datos.guia ? ` · guía ${datos.guia}` : ''}.`);
   // La guía a veces tarda unos segundos: si no vino en la respuesta, se pregunta enseguida.
   if (!datos.guia) { await espera(2500); await consultarEnvioSkydropx(storeId, orderId).catch(() => null); }
   else await aplicarEstado(storeId, orderId, datos);
@@ -625,7 +629,7 @@ async function aplicarEstado(storeId: string, orderId: string, d: DatosEnvio): P
   if (d.transportadora) { cambios.push('transportadora = ?'); params.push(corta(d.transportadora, 60)); }
   if (d.estadoTexto && d.estadoTexto !== txt(o.estado_woo)) {
     cambios.push('estado_woo = ?'); params.push(d.estadoTexto);
-    trazar(storeId, orderId, { etapa: 'despacho', nivel: d.status === 'exception' || d.status === 'delivery_attempt' ? 'warn' : 'info', titulo: `Skydropx: ${txt(o.estado_woo) || 'sin estado'} → ${d.estadoTexto}` });
+    trazar(storeId, orderId, { etapa: 'despacho', nivel: d.status === 'exception' || d.status === 'delivery_attempt' ? 'warn' : 'info', titulo: `${marcaPedido(o)}: ${txt(o.estado_woo) || 'sin estado'} → ${d.estadoTexto}` });
   }
   // Una cancelación del envío no cancela el pedido: se puede volver a despachar.
   const destino = d.status === 'canceled' ? null : siguienteEstado(txt(o.estado), estadoLogistico(d.estadoTexto, !!(d.guia || txt(o.guia))));
@@ -637,12 +641,12 @@ async function aplicarEstado(storeId: string, orderId: string, d: DatosEnvio): P
     void import('./bodegaDF.js').then((m) => m.alCambiarEstadoDF(storeId, orderId, destino || '', d.status)).catch((e) => console.error('[bodega-df] liquidación', e));
   }
   if (d.error && (d.flujo === 'failed' || d.flujo === 'error' || d.flujo === 'cancelled')) {
-    trazar(storeId, orderId, { etapa: 'despacho', nivel: 'error', titulo: 'Skydropx no pudo generar la guía', detalle: d.error });
+    trazar(storeId, orderId, { etapa: 'despacho', nivel: 'error', titulo: `${marcaPedido(o)} no pudo generar la guía`, detalle: sinMarcaSi(o, d.error) });
   }
   // Aviso de la guía apenas aparece el número (la foto del PDF llega después si aún no está).
   if ((guiaNueva || d.guia) && !Number(o.guia_avisada) && txt(o.tel) && Date.now() - (intentoAviso.get(orderId) || 0) > 3600_000) {
     intentoAviso.set(orderId, Date.now());
-    trazar(storeId, orderId, { etapa: 'despacho', nivel: 'info', titulo: `Skydropx generó la guía ${d.guia}`, detalle: d.labelUrl ? 'Ya trae el PDF.' : 'Aún sin PDF: se manda el número y la foto cuando esté.' });
+    trazar(storeId, orderId, { etapa: 'despacho', nivel: 'info', titulo: `${marcaPedido(o)} generó la guía ${d.guia}`, detalle: d.labelUrl ? 'Ya trae el PDF.' : 'Aún sin PDF: se manda el número y la foto cuando esté.' });
     const { avisarGuia } = await import('./avisoGuia.js');
     await avisarGuia(storeId, orderId).catch(() => null);
   }
@@ -676,11 +680,11 @@ export async function cancelarEnvioSkydropx(storeId: string, orderId: string, mo
   const o = db.prepare('SELECT skydropx_envio, numero FROM orders WHERE id = ? AND store_id = ?').get(orderId, storeId) as { skydropx_envio: string; numero: number } | undefined;
   if (!o?.skydropx_envio) return { error: 'Este pedido no tiene envío en Skydropx.' };
   const r = await sky(cuenta, c, 'POST', `/api/v1/shipments/${encodeURIComponent(o.skydropx_envio)}/cancellations`, { reason: corta(motivo || 'Corregir datos del pedido', 120), shipment_id: o.skydropx_envio });
-  if (!r.ok) return { error: r.http === 422 ? 'Skydropx no deja cancelar este envío (puede que la transportadora ya lo haya recogido).' : `Skydropx no canceló el envío: ${errorSky(r.body, r.http)}` };
+  if (!r.ok) return { error: (eraDF ? sinMarca : (x: string) => x)(r.http === 422 ? 'Skydropx no deja cancelar este envío (puede que la transportadora ya lo haya recogido).' : `Skydropx no canceló el envío: ${errorSky(r.body, r.http)}`) };
   db.prepare("UPDATE orders SET skydropx_envio = '', despacho_proveedor = '', guia = NULL, guia_url = '', guia_avisada = 0, estado_woo = '', guia_proveedor = '' WHERE id = ?").run(orderId);
-  trazar(storeId, orderId, { etapa: 'despacho', nivel: 'warn', titulo: 'Envío cancelado en Skydropx', detalle: motivo });
+  trazar(storeId, orderId, { etapa: 'despacho', nivel: 'warn', titulo: eraDF ? 'Envío cancelado (DealFlow Envíos)' : 'Envío cancelado en Skydropx', detalle: motivo });
   if (eraDF) void import('./bodegaDF.js').then((m) => m.alCancelarEnvioDF(storeId, orderId, motivo)).catch((e) => console.error('[bodega-df] cancelación', e));
-  registrarLog(storeId, 'info', 'despacho', `DF-${o.numero}: envío cancelado en Skydropx (${motivo}).`);
+  registrarLog(storeId, 'info', 'despacho', `DF-${o.numero}: envío cancelado${eraDF ? '' : ' en Skydropx'} (${motivo}).`);
   return { ok: true };
 }
 

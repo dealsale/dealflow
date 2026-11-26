@@ -558,6 +558,18 @@ function BodegaPortal({ t, onCambio, onAbrir, comoAdmin }: { t: Tablero; onCambi
   const elegir = (id: string) => setSel((x) => { const n = new Set(x); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const ids = () => (sel.size ? [...sel] : porDespachar.map((p) => p.id));
   const imprimir = () => window.open('/api/proveedor/guias.pdf?ids=' + encodeURIComponent(ids().join(',')), '_blank');
+  // Lista de alistamiento: lo que hay que empacar (guías por despachar), agrupado por producto.
+  const alistar = (() => {
+    const m = new Map<string, number>();
+    for (const p of porDespachar) for (const i of p.items) m.set(i.nombre, (m.get(i.nombre) || 0) + (i.qty || 0));
+    return [...m.entries()].sort((a, b) => b[1] - a[1]);
+  })();
+  const imprimirLista = () => {
+    const w = window.open('', '_blank'); if (!w) return;
+    const esc = (x: string) => x.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] || c));
+    w.document.write(`<!doctype html><meta charset="utf-8"><title>Alistamiento</title><style>body{font-family:system-ui,sans-serif;padding:24px}h1{font-size:20px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:8px;text-align:left}td.n{text-align:right;font-weight:700;width:90px}</style><h1>Alistamiento · ${new Date().toLocaleDateString('es-CO')}</h1><p>${porDespachar.length} guía(s) · ${alistar.reduce((a, x) => a + x[1], 0)} unidad(es)</p><table><tr><th>Producto</th><th>Unidades</th></tr>${alistar.map(([n, q]) => `<tr><td>${esc(n)}</td><td class="n">${q}</td></tr>`).join('')}</table><h2 style="font-size:16px;margin-top:22px">Por guía</h2><table><tr><th>Pedido</th><th>Guía</th><th>Productos</th></tr>${porDespachar.map((p) => `<tr><td>${esc(p.codigo)}</td><td>${esc(p.transportadora + ' ' + p.guia)}</td><td>${esc(p.items.map((i) => i.qty + '× ' + i.nombre).join(', '))}</td></tr>`).join('')}</table><script>print()</script>`);
+    w.document.close();
+  };
   const marcar = async () => {
     setMarcando(true);
     const res = await api<{ marcados: number }>('/recogidos', { method: 'POST', body: { ids: ids() } });
@@ -570,16 +582,33 @@ function BodegaPortal({ t, onCambio, onAbrir, comoAdmin }: { t: Tablero; onCambi
       <div style={{ padding: '16px 18px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', background: 'linear-gradient(120deg, color-mix(in srgb, #10b981 14%, transparent), color-mix(in srgb, #2e8bff 12%, transparent) 55%, color-mix(in srgb, #7658ff 14%, transparent))' }}>
         <span style={{ width: 40, height: 40, borderRadius: 12, display: 'grid', placeItems: 'center', background: 'linear-gradient(120deg, #10b981, #2e8bff 55%, #7658ff)', color: '#fff', boxShadow: '0 8px 20px -8px rgba(46,139,255,.8)' }}><Icono nombre="bodega" tam={20} /></span>
         <div style={{ flex: '1 1 240px' }}>
-          <h2 style={{ fontSize: 17, fontWeight: 800, margin: 0 }}>Bodega DealFlow</h2>
-          <div style={{ fontSize: 13, color: 'var(--df-text-muted)' }}>DealFlow genera las guías con recogida en tu bodega. Imprímelas, pégalas y márcalas cuando pase la transportadora.</div>
+          <h2 style={{ fontSize: 17, fontWeight: 800, margin: 0 }}>DealShop · Envíos DealFlow</h2>
+          <div style={{ fontSize: 13, color: 'var(--df-text-muted)' }}>DealFlow genera las guías con recogida en tu bodega (la misma guía que recibe el cliente). Alista los productos, imprime las guías, empaca y márcalas cuando pase la transportadora.</div>
         </div>
       </div>
       <div className="pp-kpis" style={{ padding: 14 }}>
         <Kpi titulo="Guías por despachar" valor={String(porDespachar.length)} sub={sinGuia ? `${sinGuia} generándose` : 'listas para imprimir'} color="#A78BFA" />
         <Kpi titulo="Novedades escaladas" valor={String(r.escalados || 0)} sub="esperando a la tienda" color="#EF4444" />
         <Kpi titulo="Te debemos (entregados)" valor={pesosCorto(Math.max(0, r.porCobrar || 0))} sub={(r.porCobrar || 0) < 0 ? `tarifas de guías por descontar: ${pesos(-(r.porCobrar || 0))}` : r.tarifasGuias ? `ya descontado ${pesos(r.tarifasGuias)} de guías` : 'DealFlow te paga por fuera'} color="#10B981" />
-        <Kpi titulo="Pedidos de la bodega" valor={String(r.bodegaDF || 0)} sub="en este periodo" color="#3B82F6" />
+        <Kpi titulo="Pedidos de DealShop" valor={String(r.bodegaDF || 0)} sub="en este periodo" color="#3B82F6" />
       </div>
+      {alistar.length > 0 && (
+        <div style={{ margin: '0 16px 14px', border: '1px solid color-mix(in srgb, #10b981 35%, var(--df-border))', borderRadius: 12, padding: '10px 12px', background: 'color-mix(in srgb, #10b981 6%, var(--df-surface))' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+            <IconoColor color="#10b981"><Icono nombre="paquete" tam={16} /></IconoColor>
+            <b style={{ fontSize: 14, flex: 1 }}>Para alistar · {alistar.reduce((a, x) => a + x[1], 0)} unidad(es) en {porDespachar.length} guía(s)</b>
+            <button className="pp-btn" onClick={imprimirLista} style={{ padding: '6px 10px' }}>Imprimir lista</button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 6 }}>
+            {alistar.map(([n, q]) => (
+              <div key={n} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 9, padding: '6px 9px', fontSize: 13 }}>
+                <span style={{ minWidth: 30, height: 24, borderRadius: 7, background: '#10b981', color: '#fff', display: 'grid', placeItems: 'center', fontWeight: 800, fontSize: 12.5, padding: '0 6px' }}>{q}</span>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={n}>{n}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       {porDespachar.length > 0 && (
         <>
           <div style={{ padding: '0 16px 12px', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>

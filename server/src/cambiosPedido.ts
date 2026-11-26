@@ -24,6 +24,7 @@ const norm = (s: string) => String(s || '').toLowerCase().normalize('NFD').repla
 try { db.exec("ALTER TABLE orders ADD COLUMN guia_at TEXT NOT NULL DEFAULT ''"); } catch { /* ya existe */ }
 try { db.exec("ALTER TABLE orders ADD COLUMN cambio_cliente TEXT NOT NULL DEFAULT ''"); } catch { /* ya existe */ }
 try { db.exec("ALTER TABLE leads ADD COLUMN cambio_pedido TEXT NOT NULL DEFAULT ''"); } catch { /* ya existe */ }
+try { db.exec('ALTER TABLE orders ADD COLUMN repetido_ok INTEGER NOT NULL DEFAULT 0'); } catch { /* ya existe */ }
 db.exec(`CREATE TRIGGER IF NOT EXISTS orders_guia_at AFTER UPDATE OF guia ON orders
   WHEN COALESCE(OLD.guia,'') = '' AND COALESCE(NEW.guia,'') != '' AND COALESCE(NEW.guia_at,'') = ''
   BEGIN UPDATE orders SET guia_at = datetime('now') WHERE id = NEW.id; END`);
@@ -109,7 +110,12 @@ export function resolverDecision(storeId: string, leadId: string, texto: string,
     if (o) e = { orderId: txt(o.id), numero: txt(o.numero), marcador: '', at: Date.now() };
   }
   if (!e) return { respuesta: '', decision: '' };
-  const d = clasificarDecision(texto);
+  let d = clasificarDecision(texto);
+  // A «¿quieres un pedido nuevo igual a ese?» un «sí / claro / dale» es «nuevo».
+  if (!d && /^(si|sii+|claro|dale|listo|de una|bueno|ok|okey|correcto|asi es|por favor|porfa)\b/.test(norm(texto))) {
+    const ult = db.prepare("SELECT texto FROM messages WHERE lead_id = ? AND de = 'bot' ORDER BY created_at DESC, rowid DESC LIMIT 1").get(leadId) as { texto: string } | undefined;
+    if (/igual a ese\?/.test(norm(ult?.texto || ''))) d = 'nuevo';
+  }
   if (!d) return { respuesta: '', decision: '' };
   if (d === 'nuevo') {
     guardar(leadId, { ...e, decision: 'nuevo', decisionAt: Date.now() });
@@ -180,20 +186,144 @@ export async function respuestaCambioPedido(storeId: string, leadId: string, tex
   return true;
 }
 
+// ── Pedido repetido: los mismos productos de un pedido que ya salió o ya se entregó ───────────
+
+/** Productos del pedido como conjunto (por producto, sin cantidad ni talla/color). */
+function claveProductos(its: { nombre: string; productId?: string | null }[]): string {
+  return [...new Set(its.map((i) => (i.productId ? `#${i.productId}` : norm(String(i.nombre || '').split('(')[0].split(/\s[—–-]\s/)[0]))).filter(Boolean))].sort().join('|');
+}
+
+/**
+ * ¿El cliente ya tiene, de los últimos 20 días, un pedido con guía / despachado / ENTREGADO con los
+ * mismos productos? Entonces lo que el asistente quiere registrar es casi seguro el mismo pedido
+ * otra vez (pasó con el «sí, gracias» al aviso de entrega: salían dos guías al mismo cliente).
+ */
+export function pedidoRepetido(storeId: string, leadId: string, tels: string[], items: { nombre: string; productId?: string | null }[]): Fila | undefined {
+  const t = tels.filter((x) => x.length === 10);
+  const nueva = claveProductos(items);
+  if (!nueva) return undefined;
+  const cands = db.prepare(
+    `SELECT * FROM orders WHERE store_id = ? AND estado NOT IN ('Cancelado','Devuelto') AND created_at > datetime('now','-20 days')
+       AND (COALESCE(guia,'') != '' OR COALESCE(effi_remision,'') != '' OR COALESCE(dropi_order_id,'') != '' OR estado NOT IN ('Nuevo','Confirmado'))
+       AND (lead_id = ? ${t.map(() => "OR substr(REPLACE(REPLACE(REPLACE(REPLACE(tel,' ',''),'+',''),'-',''),'(',''), -10) = ?").join(' ')})
+     ORDER BY created_at DESC LIMIT 5`,
+  ).all(storeId, leadId, ...t) as Fila[];
+  return cands.find((o) => {
+    const its = db.prepare('SELECT nombre, product_id AS productId FROM order_items WHERE order_id = ?').all(txt(o.id)) as { nombre: string; productId: string | null }[];
+    if (claveProductos(its) === nueva) return true;
+    // Por si un lado tiene el producto enlazado y el otro no: se compara por nombre.
+    return claveProductos(its.map((i) => ({ nombre: i.nombre }))) === claveProductos(items.map((i) => ({ nombre: i.nombre })));
+  });
+}
+
+export interface ParRepetido {
+  repetido: { id: string; numero: string; estado: string; total: number; creado: string; guia: string; donde: string; items: string };
+  original: { id: string; numero: string; estado: string; total: number; creado: string; guia: string; items: string };
+  cliente: string; tel: string; leadId: string;
+}
+
+const dondeSale = (o: Fila) => (txt(o.dropi_order_id) ? 'dropi' : txt(o.effi_remision) || pj<Fila>(txt(o.effi_guia), {}).id ? 'effi' : txt(o.despacho_proveedor) === 'bodega_df' ? 'bodega' : txt(o.guia) ? 'guia' : '');
+
+/**
+ * Pedidos de los últimos 30 días que parecen la MISMA compra repetida: el asistente creó un pedido con
+ * los mismos productos que otro del mismo cliente que ya tenía guía o ya iba en camino/entregado
+ * (de 1 hora a 20 días antes). Para que la tienda cancele las guías que salieron de más.
+ */
+export function pedidosRepetidos(storeId: string): ParRepetido[] {
+  const nuevos = db.prepare(
+    `SELECT * FROM orders WHERE store_id = ? AND estado NOT IN ('Cancelado','Devuelto') AND created_at > datetime('now','-30 days')
+       AND COALESCE(origen,'') IN ('whatsapp','instagram','messenger','web','') AND COALESCE(repetido_ok,0) = 0
+     ORDER BY created_at DESC LIMIT 1500`,
+  ).all(storeId) as Fila[];
+  const its = (id: string) => db.prepare('SELECT nombre, qty, product_id AS productId FROM order_items WHERE order_id = ?').all(id) as { nombre: string; qty: number; productId: string | null }[];
+  const out: ParRepetido[] = [];
+  const vistos = new Set<string>();
+  for (const o of nuevos) {
+    const t = d10(o.tel);
+    if (t.length !== 10 && !txt(o.lead_id)) continue;
+    const previos = db.prepare(
+      `SELECT * FROM orders WHERE store_id = ? AND id != ? AND estado NOT IN ('Cancelado','Devuelto')
+         AND created_at < datetime(?, '-1 hours') AND created_at > datetime(?, '-20 days')
+         AND (COALESCE(guia,'') != '' OR COALESCE(effi_remision,'') != '' OR COALESCE(dropi_order_id,'') != '' OR estado NOT IN ('Nuevo','Confirmado'))
+         AND ((? != '' AND lead_id = ?) OR (? != '' AND substr(REPLACE(REPLACE(REPLACE(REPLACE(tel,' ',''),'+',''),'-',''),'(',''), -10) = ?))
+       ORDER BY created_at DESC LIMIT 5`,
+    ).all(storeId, txt(o.id), txt(o.created_at), txt(o.created_at), txt(o.lead_id), txt(o.lead_id), t.length === 10 ? t : '', t) as Fila[];
+    if (!previos.length) continue;
+    const itsO = its(txt(o.id));
+    const clave = claveProductos(itsO), claveN = claveProductos(itsO.map((i) => ({ nombre: i.nombre })));
+    const orig = previos.find((p) => { const x = its(txt(p.id)); return claveProductos(x) === clave || claveProductos(x.map((i) => ({ nombre: i.nombre }))) === claveN; });
+    if (!orig || vistos.has(txt(o.id))) continue;
+    vistos.add(txt(o.id));
+    const linea = (x: { nombre: string; qty: number }[]) => x.map((i) => `${i.qty}× ${i.nombre}`).join(', ');
+    out.push({
+      repetido: { id: txt(o.id), numero: txt(o.numero), estado: txt(o.estado), total: Number(o.total) || 0, creado: txt(o.created_at), guia: txt(o.guia), donde: dondeSale(o), items: linea(itsO) },
+      original: { id: txt(orig.id), numero: txt(orig.numero), estado: txt(orig.estado), total: Number(orig.total) || 0, creado: txt(orig.created_at), guia: txt(orig.guia), items: linea(its(txt(orig.id))) },
+      cliente: txt(o.cliente), tel: txt(o.tel), leadId: txt(o.lead_id),
+    });
+  }
+  return out;
+}
+
+/** «No es repetido»: la tienda revisó y era una compra de verdad; no vuelve a salir en la lista. */
+export function marcarNoRepetido(storeId: string, orderId: string): boolean {
+  return db.prepare('UPDATE orders SET repetido_ok = 1 WHERE id = ? AND store_id = ?').run(orderId, storeId).changes > 0;
+}
+
+/**
+ * Cancela el pedido repetido SIN avisarle al cliente (no tiene sentido decirle «tu pedido fue
+ * cancelado» si su compra de verdad sigue en camino). Si salió por Effi intenta anular la guía y la
+ * remisión; en Dropi la orden hay que cancelarla allá (se le dice a la tienda).
+ */
+export async function cancelarRepetido(storeId: string, orderId: string, quien: string): Promise<{ ok: true; nota: string } | { error: string }> {
+  const o = db.prepare('SELECT * FROM orders WHERE id = ? AND store_id = ?').get(orderId, storeId) as Fila | undefined;
+  if (!o) return { error: 'Pedido no encontrado.' };
+  if (txt(o.estado) === 'Cancelado') return { ok: true, nota: 'Ya estaba cancelado.' };
+  if (['Entregado', 'Devuelto'].includes(txt(o.estado))) return { error: `El pedido DF-${txt(o.numero)} ya está ${txt(o.estado).toLowerCase()}: no se puede cancelar.` };
+  let nota = '';
+  const donde = dondeSale(o);
+  if (donde === 'effi') {
+    const r = await (await import('./effiApi.js')).anularEnEffi(storeId, orderId, 'Pedido repetido');
+    if ('error' in r) return { error: r.error };
+    nota = `Se anuló en Effi${r.guias.length ? ` la guía ${r.guias.join(', ')}` : ''} y la remisión ${r.remision}.`;
+  } else if (donde === 'dropi') nota = `Cancela también la orden ${txt(o.dropi_order_id)} en Dropi: desde DealFlow no se puede cancelar allá.`;
+  else if (donde === 'guia') nota = `Tenía la guía ${txt(o.guia)}: anúlala en la transportadora si todavía no la recogen.`;
+  // La Bodega DealFlow cancela su envío sola cuando ve el pedido cancelado (y devuelve la plata).
+  db.prepare("UPDATE orders SET estado = 'Cancelado' WHERE id = ?").run(orderId);
+  trazar(storeId, orderId, { etapa: 'estado', nivel: 'warn', titulo: `Pedido repetido cancelado (${txt(o.estado)} → Cancelado)`, detalle: `Por ${quien}. No se le avisó al cliente. ${nota}`.trim() });
+  registrarLog(storeId, 'info', 'pedido', `DF-${txt(o.numero)} cancelado por repetido (${quien}). ${nota}`.trim(), txt(o.lead_id) || undefined);
+  return { ok: true, nota };
+}
+
+/** ¿El cliente dijo claramente que quiere OTRO (otra vez, uno más, para un regalo…) después de ese pedido? */
+export function pideOtraVez(leadId: string, desde: string): boolean {
+  const msgs = db.prepare("SELECT texto FROM messages WHERE lead_id = ? AND de = 'cliente' AND created_at > ? AND TRIM(COALESCE(texto,'')) != '' ORDER BY created_at DESC LIMIT 12").all(leadId, desde) as { texto: string }[];
+  return msgs.some((m) => /\b(otro|otra|otros|otras|de nuevo|nuevamente|otra vez|volver a (pedir|comprar)|uno mas|una mas|dos mas|mas unidades|adicional|nuevo pedido|pedido nuevo|para regalar|regalo|para mi (amig|herman|mama|papa|espos|hij|vecin|prim)\w*)\b/.test(norm(m.texto)));
+}
+
+/** Pregunta al cliente si de verdad quiere un pedido nuevo igual al que ya salió. */
+export function preguntaPedidoRepetido(storeId: string, leadId: string, o: Fila, marcador: string): string {
+  guardar(leadId, { orderId: txt(o.id), numero: txt(o.numero), marcador, at: Date.now() });
+  const nombre = txt(o.cliente).split(' ')[0];
+  const entregado = txt(o.estado) === 'Entregado';
+  const guia = txt(o.guia);
+  trazar(storeId, txt(o.id), { etapa: 'pedido', nivel: 'warn', titulo: 'Posible pedido repetido: se le preguntó al cliente si quiere otro igual', detalle: 'No se creó otro pedido todavía.', datos: { marcador } });
+  return `${nombre ? `${nombre}, ` : ''}tu pedido *DF-${txt(o.numero)}* (${resumenItems(itemsDe(txt(o.id)))}) ${entregado ? 'ya te fue entregado' : `ya va en camino${guia ? ` con la guía *${guia}*` : ''}`}. 😊\n\n¿Quieres hacer un *pedido nuevo* aparte, igual a ese? Respóndeme «nuevo» y te lo registro.`;
+}
+
 // ── Freno: que un «ok» a un aviso, o un reclamo, no se conviertan en un pedido nuevo ──────────
 
 /** Mensaje del bot que es un aviso sobre un pedido que ya existe (guía, en camino, en oficina, entregado…). */
 export function esAvisoDePedido(texto: string): boolean {
   const t = norm(texto);
   if (!t || /resumen de tu pedido|¿?confirmas|lo que pediste|vas a pagar/.test(t)) return false;
-  return /tenemos noticias de tu pedido|disponible para recoger|en la oficina de la transportadora|foto de tu guia|numero de guia|tu guia|guia de envio|ya te fue entregado|fue entregado|ya lo recogio|va en camino|esta en camino|en reparto|novedad|tu pedido (ya|df-)/.test(t);
+  return /tenemos noticias de tu pedido|disponible para recoger|en la oficina de la transportadora|foto de tu guia|numero de guia|tu guia|guia de envio|ya te fue entregado|fue entregado|ya lo recogio|va en camino|esta en camino|en reparto|novedad|tu pedido (ya|df-)|ya fue despachado|ya tiene guia|\[plantilla: (pedido_|guia_|estado_|novedad_)|^guia \S+ \(df-/.test(t);
 }
 
 /** Respuesta corta que solo acusa recibo («ok», «gracias», «ya lo recogí»), sin pedir nada nuevo. */
 export function esAcuseDeRecibo(texto: string): boolean {
   const t = norm(texto);
   if (!t || t.length > 160) return false;
-  return !/\b(quiero|quisiera|necesito|otro|otra|otros|mas|pedir|pido|comprar|compro|pack|paquete|talla|color|unidades|enviame|mandame|me (envia|envian|manda|mandan)|agrega|agregar|adicional)\b/.test(t);
+  return !/\b(quiero|quisiera|necesito|otro|otra|otros|mas|pedir|pido|comprar|compro|pack|paquete|talla|color|unidades|nuevo|nueva|aparte|enviame|mandame|me (envia|envian|manda|mandan)|agrega|agregar|adicional)\b/.test(t);
 }
 
 const RECLAMO = /\b(reclamo|reclamar|reclamacion|me llego|me llegaron|llegaron|llego (mal|roto|danad\w*|incomplet\w*|otro|otra)|no es lo que (pedi|ped\w*)|no son los que|defectuos\w*|danad\w*|roto|rota|garantia|devoluci\w*|devolver|mi plata|reembols\w*|estafa\w*|boletiar|boletear|denunci\w*|ratas?|ladron\w*|no sirve|incomplet\w*|faltan|falto|equivocad\w*)\b/;

@@ -2880,7 +2880,7 @@ export function useDealFlowState() {
     if (data) setBibliotecaItems(data.productos);
   }
   useEffect(() => {
-    if (apiMode && sessionUser && section === 'biblioteca') void reloadBiblioteca();
+    if (apiMode && sessionUser && (section === 'biblioteca' || section === 'dealshop')) void reloadBiblioteca();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiMode, sessionUser, section]);
   function importarDeBiblioteca(id: string) {
@@ -3472,7 +3472,7 @@ export function useDealFlowState() {
     void apiPlantillas().then(({ data }) => { if (data) setPlantillas(data.plantillas); });
   }
   useEffect(() => {
-    if (apiMode && sessionUser && section === 'dealshop') reloadPlantillas();
+    if (apiMode && sessionUser && section === 'asistente') reloadPlantillas();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiMode, sessionUser, section]);
 
@@ -4384,6 +4384,7 @@ export function useDealFlowState() {
     instalando,
     plantillaMsg,
     instalarPlantilla,
+    reloadPlantillas,
     desinstalarPlantilla,
     restaurarPlantilla,
     plantillaActiva,

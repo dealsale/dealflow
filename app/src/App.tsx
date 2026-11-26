@@ -40,6 +40,8 @@ import { Logistica } from './sections/Logistica';
 import { Productos } from './sections/Productos';
 import { Equipo } from './sections/Equipo';
 import { DealShop } from './sections/DealShop';
+import { Billetera } from './sections/Billetera';
+import { BodegaDFAdminPanel } from './components/BodegaDFAdmin';
 import { Marketing } from './sections/Marketing';
 import { Comentarios } from './sections/Comentarios';
 import { AdsManager } from './sections/AdsManager';
@@ -387,6 +389,7 @@ function AdminContent({ df }: { df: DealFlowState }) {
       {df.adminSection === 'trazabilidad' && <Trazabilidad df={df} />}
       {df.isSoporte ? null : <>
       {df.adminSection === 'proveedores' && <Proveedores />}
+      {df.adminSection === 'dealshop' && <BodegaDFAdminPanel alCrear={df.entrarBiblioteca} />}
       {df.adminSection === 'estudio' && !df.isSoporte && <EstudioAdmin />}
       {df.adminSection === 'contabilidad' && df.isSuperadmin && <Contabilidad />}
       {df.adminSection === 'planes' && <Planes df={df} />}
@@ -458,6 +461,8 @@ function DesktopApp({ df }: { df: DealFlowState }) {
           {df.isVendedor && df.section === 'whatsapp' && <WhatsAppSection df={df} />}
           {df.isVendedor && df.section === 'equipo' && <Equipo df={df} />}
           {df.isVendedor && df.section === 'dealshop' && <DealShop df={df} />}
+        {df.isVendedor && df.section === 'billetera' && <Billetera df={df} />}
+          {df.isVendedor && df.section === 'billetera' && <Billetera df={df} />}
           {df.isVendedor && df.section === 'biblioteca' && <Biblioteca df={df} />}
           {df.isVendedor && df.section === 'marketing' && <Marketing df={df} />}
           {df.isVendedor && df.section === 'anuncios' && <AdsManager />}

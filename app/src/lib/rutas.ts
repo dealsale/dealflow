@@ -12,8 +12,8 @@
 import { useEffect, useState } from 'react';
 import type { AdminSection, VendedorSection } from '../types';
 
-const VENDEDOR: VendedorSection[] = ['resumen', 'estadisticas', 'productos', 'asistente', 'whatsapp', 'logistica', 'pedidos', 'leads', 'crm', 'comentarios', 'equipo', 'marketing', 'anuncios', 'dealshop', 'biblioteca', 'integraciones', 'landings'];
-const ADMIN: AdminSection[] = ['contabilidad', 'planes', 'cuentas', 'cupones', 'superadmin', 'biblioteca', 'plantillas', 'trazabilidad', 'proveedores', 'soporte', 'equipo', 'estudio'];
+const VENDEDOR: VendedorSection[] = ['resumen', 'estadisticas', 'productos', 'asistente', 'whatsapp', 'logistica', 'pedidos', 'leads', 'crm', 'comentarios', 'equipo', 'marketing', 'anuncios', 'dealshop', 'billetera', 'biblioteca', 'integraciones', 'landings'];
+const ADMIN: AdminSection[] = ['dealshop', 'contabilidad', 'planes', 'cuentas', 'cupones', 'superadmin', 'biblioteca', 'plantillas', 'trazabilidad', 'proveedores', 'soporte', 'equipo', 'estudio'];
 // Nombre en la URL distinto al interno (más claro para el usuario).
 const A_URL: Partial<Record<VendedorSection, string>> = { crm: 'inbox', landings: 'tienda-en-linea' };
 const DE_URL: Record<string, VendedorSection> = { inbox: 'crm', 'tienda-en-linea': 'landings' };

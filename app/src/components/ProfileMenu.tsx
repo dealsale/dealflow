@@ -3,6 +3,28 @@ import { IconoDF, type IconoDFNombre } from './IconoDF';
 import { setAsistenteVisible, useAsistenteVisible, useSoporteConfig } from './AsistenteSoporte';
 import { cambiarIdiomaUI, idiomaUI, type IdiomaUI } from '../i18n/traductor';
 import type { DealFlowState } from '../hooks/useDealFlowState';
+import { useEnviosDF } from './EnviosDF';
+import { Icono } from './Icono';
+import { fmt } from '../lib/format';
+
+/** Fila «Billetera» del perfil: muestra el saldo y lleva a la página de la billetera. */
+function FilaBilletera({ onIr }: { onIr: () => void }) {
+  const [e] = useEnviosDF();
+  return (
+    <div onClick={onIr} className="df-row-hover" role="button"
+      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', fontSize: 13, fontWeight: 700, color: 'var(--df-text)', cursor: 'pointer', borderBottom: '1px solid var(--df-border)' }}>
+      <span style={{ width: 30, height: 30, borderRadius: 9, display: 'grid', placeItems: 'center', color: '#fff', background: 'linear-gradient(120deg, #10b981, #2e8bff 55%, #7658ff)', flexShrink: 0 }}>
+        <Icono nombre="billetera" tam={16} />
+      </span>
+      <span style={{ flex: 1, display: 'grid', gap: 1 }}>
+        <span>Billetera</span>
+        <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--df-text-muted)' }}>Recargas, retiros y movimientos</span>
+      </span>
+      {e && <span style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--df-brand-dark)' }}>{fmt(e.saldo)}</span>}
+      <span style={{ fontSize: 10, color: 'var(--df-text-faint)' }}>▸</span>
+    </div>
+  );
+}
 
 /** Avatar redondo: la foto de perfil si hay, si no las iniciales. En el tema
  * Premium lleva un anillo de gradiente (detalle exclusivo de ese tema).
@@ -232,6 +254,8 @@ export function ProfileMenu({ df, onDarkBar }: { df: DealFlowState; onDarkBar?: 
           {df.perfilMsg && (
             <div style={{ padding: '8px 16px 0', fontSize: 12, color: df.perfilMsg.startsWith('✓') ? 'var(--df-brand-dark)' : 'var(--df-danger)' }}>{df.perfilMsg}</div>
           )}
+
+          {df.esDueno && <FilaBilletera onIr={() => { setOpen(false); df.go('billetera'); }} />}
 
           {/* Tema */}
           <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--df-border)' }}>

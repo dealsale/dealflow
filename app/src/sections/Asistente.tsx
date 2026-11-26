@@ -4,6 +4,7 @@ import { AudioChat } from '../components/MediaBubble';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import { apiWebchatList, apiWebchatSend } from '../lib/api';
 import type { ApiMensaje } from '../lib/api';
+import { PlantillasNegocio } from '../components/PlantillasNegocio';
 
 /** Grupo de opciones tipo segmento para el tono/estilo del asistente. */
 function SegChips<T extends string | boolean>({ label, value, opciones, onPick }: { label: string; value: T | undefined; opciones: { v: T; t: string }[]; onPick: (v: T) => void }) {
@@ -198,6 +199,8 @@ export function Asistente({ df }: { df: DealFlowState }) {
     <section data-screen-label="Asistente">
       <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}>Asistente</h1>
       <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: '0 0 16px' }}>Dale personalidad, enséñale tu negocio y dile cómo vender. Pruébalo al lado mientras lo ajustas.</p>
+
+      <PlantillasNegocio df={df} />
 
       <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.35fr) minmax(300px, 1fr)', gap: 14, alignItems: 'start' }}>
         <div style={tarjeta}>

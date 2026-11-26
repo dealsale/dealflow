@@ -140,6 +140,7 @@ api.post('/auth/registro', (req, res) => {
       db.prepare('INSERT OR IGNORE INTO assistants (store_id) VALUES (?)').run(storeId);
     });
     crear();
+    void import('./plantillas.js').then((p) => p.preinstalarPlantilla(storeId)).catch(() => {});
   } catch (e) {
     console.error('[registro] error', e);
     return res.status(500).json({ error: 'No pudimos crear tu cuenta. Intenta de nuevo; si sigue fallando, escríbenos.' });
@@ -330,6 +331,7 @@ api.post('/crear-tienda', requireAuth, requireStore, (req, res) => {
       db.prepare('UPDATE users SET store_id = ? WHERE id = ?').run(storeId, req.user!.id);
     });
     crear();
+    void import('./plantillas.js').then((p) => p.preinstalarPlantilla(storeId)).catch(() => {});
   } catch (e) {
     console.error('[crear-tienda] error', e);
     return res.status(500).json({ error: 'No pudimos crear la tienda. ' + (e instanceof Error ? e.message : '') });
@@ -1168,6 +1170,19 @@ api.post('/orders/:rowId/estado', requireAuth, requireStore, requirePermiso('ped
   // Aviso al cliente: los estados del envío los encola el trigger (avisosEstado.ts); "Confirmado"
   // y "Cancelado" a mano se encolan aquí. La cola reintenta y usa plantilla si pasaron 24 h.
   if (nuevo === 'Confirmado' || nuevo === 'Cancelado') (await import('./avisosEstado.js')).encolarAviso(sid, o.id, nuevo);
+});
+
+// ── Pedidos repetidos (la misma compra registrada dos veces por el asistente) ──
+api.get('/pedidos-repetidos', requireAuth, requireStore, async (req, res) => {
+  res.json({ pares: (await import('./cambiosPedido.js')).pedidosRepetidos(req.user!.storeId!) });
+});
+api.post('/pedidos-repetidos/:rowId/cancelar', requireAuth, requireStore, requirePermiso('pedidos_editar'), async (req, res) => {
+  const r = await (await import('./cambiosPedido.js')).cancelarRepetido(req.user!.storeId!, String(req.params.rowId), req.user!.nombre);
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
+});
+api.post('/pedidos-repetidos/:rowId/no-es', requireAuth, requireStore, requirePermiso('pedidos_editar'), async (req, res) => {
+  res.json({ ok: (await import('./cambiosPedido.js')).marcarNoRepetido(req.user!.storeId!, String(req.params.rowId)) });
 });
 
 // ── Calidad del número de WhatsApp ──
@@ -2741,8 +2756,14 @@ api.post('/leads/:id/reset', requireAuth, requireStore, (req, res) => {
 
 // ── DealShop · plantillas de tienda ──────────────────────────────────
 api.get('/plantillas', requireAuth, requireStore, async (req, res) => {
-  const { listarPlantillas } = await import('./plantillas.js');
-  res.json({ plantillas: listarPlantillas(req.user!.storeId!) });
+  const { listarPlantillas, TIPOS_NEGOCIO, tipoNegocio } = await import('./plantillas.js');
+  res.json({ plantillas: listarPlantillas(req.user!.storeId!), tipos: TIPOS_NEGOCIO, tipo: tipoNegocio(req.user!.storeId!) });
+});
+
+api.post('/tipo-negocio', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const r = (await import('./plantillas.js')).elegirTipoNegocio(req.user!.storeId!, String(req.body?.tipo || ''));
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
 });
 
 api.post('/plantillas/:id/instalar', requireAuth, requireStore, requireOwner, async (req, res) => {
@@ -4715,6 +4736,7 @@ api.post('/admin/stores', requireAuth, requireAdmin, (req, res) => {
   // Dueño marcado desde el inicio (entrar a la tienda y la multi-tienda lo buscan aquí).
   db.prepare('UPDATE stores SET owner_user_id = ? WHERE id = ?').run(duenoId, storeId);
   db.prepare('INSERT INTO whatsapp (store_id) VALUES (?)').run(storeId);
+  void import('./plantillas.js').then((p) => p.preinstalarPlantilla(storeId)).catch(() => {});
   db.prepare('INSERT INTO assistants (store_id) VALUES (?)').run(storeId);
   res.json({ storeId });
 });
@@ -4843,7 +4865,7 @@ api.post('/suscripcion/shopify/revisar', requireAuth, requireStore, async (req, 
 api.get('/shopify/cobro/vuelta', async (req, res) => {
   const ref = String(req.query.ref || '');
   const r = await sa.verificarCobroUnico(ref).catch(() => ({ ok: false, tipo: '' }));
-  const destino: Record<string, string> = { creditos: '/marketing', biblioteca: '/biblioteca', billetera: '/biblioteca', biblioteca_landing: '/tienda-en-linea', tienda_online: '/tienda-en-linea' };
+  const destino: Record<string, string> = { creditos: '/marketing', biblioteca: '/biblioteca', billetera: '/billetera', biblioteca_landing: '/tienda-en-linea', tienda_online: '/tienda-en-linea' };
   res.redirect(`${destino[r.tipo || ''] || '/'}?pago=${r.ok ? 'shopify-ok' : 'shopify-no'}`);
 });
 
@@ -5558,6 +5580,10 @@ api.post('/biblioteca/:id/importar', requireAuth, requireStore, requireOwner, as
   const lib = getLibraryProduct(req.params.id);
   if (!lib || !lib.activo) return res.status(404).json({ error: 'Producto de biblioteca no disponible.' });
   const storeId = req.user!.storeId!;
+  // Productos de DealShop: los despacha DealFlow, así que primero se activa Envíos DealFlow (términos).
+  if ((await import('./bodegaDF.js')).infoBibliotecaDF().has(req.params.id) && !(await import('./enviosDF.js')).enviosDFActivo(storeId)) {
+    return res.status(400).json({ error: 'Para vender productos de DealShop primero activa Envíos DealFlow (arriba en DealShop) y acepta los términos.' });
+  }
   if (!lib.gratis && !yaAdquirido(storeId, req.params.id)) {
     return res.json({ requierePago: true, precio: lib.precio_importacion });
   }

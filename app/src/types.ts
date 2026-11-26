@@ -315,11 +315,12 @@ export type VendedorSection =
   | 'marketing'
   | 'anuncios'
   | 'dealshop'
+  | 'billetera'
   | 'landings'
   | 'biblioteca'
   | 'integraciones';
 
-export type AdminSection = 'contabilidad' | 'planes' | 'cuentas' | 'cupones' | 'superadmin' | 'biblioteca' | 'plantillas' | 'trazabilidad' | 'proveedores' | 'soporte' | 'equipo' | 'estudio';
+export type AdminSection = 'dealshop' | 'contabilidad' | 'planes' | 'cuentas' | 'cupones' | 'superadmin' | 'biblioteca' | 'plantillas' | 'trazabilidad' | 'proveedores' | 'soporte' | 'equipo' | 'estudio';
 
 /** Etiquetas de conversación en el CRM. '' = sin etiqueta. */
 export const ETIQUETAS_CRM = ['Seguimiento', 'Venta', 'Garantía', 'Reclamo', 'Mayorista', 'Postventa'] as const;

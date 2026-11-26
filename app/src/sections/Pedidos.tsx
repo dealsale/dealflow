@@ -10,6 +10,7 @@ import { Dropdown } from '../components/Dropdown';
 import { confirmar } from '../components/dialogs';
 import { useFiltrosPedidos, PanelFiltros, ResumenFiltros, ORDENES, fechaCorta, valorPedido, type Orden } from '../components/PedidosFiltros';
 import { LogoMarca } from '../components/LogoMarca';
+import { PedidosRepetidos } from '../components/PedidosRepetidos';
 
 // Columnas tipo Excel: cada dato en su celda. Una sola tabla que se acomoda al
 // ancho disponible (portátil incluido); en pantallas angostas, tarjetas.
@@ -84,6 +85,8 @@ export function Pedidos({ df }: { df: DealFlowState }) {
         </button>
         </div>
       </div>
+
+      <PedidosRepetidos verPedido={df.verPedido} alCambiar={() => void df.recargarPedidos()} />
 
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
         <SearchInput value={df.orderQuery} onChange={df.setOrderQuery} placeholder="Cliente, teléfono, número, producto o guía…" width={320} />

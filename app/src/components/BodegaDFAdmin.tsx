@@ -26,7 +26,7 @@ const soloNum = (v: string) => v.replace(/[^\d.]/g, '');
 
 type Sub = 'productos' | 'bodegas' | 'billeteras' | 'despachos';
 
-export function BodegaDFAdminPanel() {
+export function BodegaDFAdminPanel({ alCrear }: { alCrear?: () => void }) {
   const [d, setD] = useState<BodegaDFAdmin | null>(null);
   const [error, setError] = useState('');
   const [sub, setSub] = useState<Sub>('productos');
@@ -35,8 +35,9 @@ export function BodegaDFAdminPanel() {
   if (error) return <div style={{ ...card, padding: 20, color: 'var(--df-danger)' }}>{error}</div>;
   if (!d) return <div style={{ ...card, padding: 30, textAlign: 'center', color: 'var(--df-text-muted)' }}>Cargando la bodega…</div>;
   const activos = d.productos.filter((p) => p.activo).length;
-  const pendRetiros = d.billeteras.retiros.filter((r) => r.estado === 'pendiente').length;
-  const conProblema = d.despachos.filter((p) => ['error', 'sin_saldo', 'mixto'].includes(p.dfEstado)).length;
+  const pendRetiros = d.billeteras ? d.billeteras.retiros.filter((r) => r.estado === 'pendiente').length : 0;
+  const conProblema = d.despachos.filter((p) => ['error', 'sin_saldo', 'mixto', 'sin_activar'].includes(p.dfEstado)).length;
+  const sa = !!d.esSuper;
   const subTab = (id: Sub, texto: string, icono: NombreIcono, color: string, badge?: number) => (
     <button onClick={() => setSub(id)} style={{ ...btn, borderRadius: 999, padding: '7px 13px', borderColor: sub === id ? 'var(--df-brand)' : 'var(--df-border)', background: sub === id ? 'var(--df-brand-subtle-2)' : 'var(--df-surface)' }}>
       <IconoColor color={color}><Icono nombre={icono} tam={15} /></IconoColor>{texto}
@@ -46,29 +47,34 @@ export function BodegaDFAdminPanel() {
   return (
     <div style={{ display: 'grid', gap: 14 }}>
       <div>
-        <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}>Bodega DealFlow</h1>
-        <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: 0 }}>Productos de la Biblioteca que despacha DealFlow con su cuenta de Skydropx, desde la bodega de cada proveedor. Las tiendas pagan con su billetera y reciben lo que pagan sus clientes contra entrega.</p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px', flex: 1 }}>DealShop</h1>
+          {alCrear && <button className="df-btn-primary" style={btnPri} onClick={alCrear} title="Abre el editor completo de la Biblioteca: crea el producto con fotos, variantes y reglas, agrégalo a la Biblioteca y márcalo aquí como DealShop."><Icono nombre="agregar" tam={14} />Crear producto</button>}
+        </div>
+        <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: 0 }}>Productos que vende DealFlow: las tiendas los desbloquean (gratis o con pago único), DealFlow genera la guía con Envíos DealFlow desde la bodega del proveedor, recauda el contraentrega y le abona a la tienda. El producto se crea igual que en la Biblioteca y aquí se le asigna la bodega y el costo.</p>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 14 }}>
-        <Cuenta cuenta={d.cuenta} onCambio={(c) => setD({ ...d, cuenta: c })} />
-        <Ajustes ajustes={d.ajustes} onGuardado={(a) => setD({ ...d, ajustes: a })} />
-      </div>
+      {sa && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 14 }}>
+          <Cuenta cuenta={d.cuenta} onCambio={(c) => setD({ ...d, cuenta: c })} />
+          <Ajustes ajustes={d.ajustes} onGuardado={(a) => setD({ ...d, ajustes: a })} />
+        </div>
+      )}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 12 }}>
         <Kpi titulo="Productos activos" valor={String(activos)} color="#A78BFA" icono="paquete" />
-        <Kpi titulo="Dinero en custodia" valor={fmt(d.billeteras.enCustodia)} color="#34D399" icono="billetera" />
-        <Kpi titulo="Retiros por pagar" valor={String(pendRetiros)} color="#F472B6" icono="pago" />
+        {d.billeteras && <Kpi titulo="Dinero en custodia" valor={fmt(d.billeteras.enCustodia)} color="#34D399" icono="billetera" />}
+        {d.billeteras && <Kpi titulo="Retiros por pagar" valor={String(pendRetiros)} color="#F472B6" icono="pago" />}
         <Kpi titulo="Despachos con problema" valor={String(conProblema)} color="#F87171" icono="alerta" />
-        <Kpi titulo={`Ganancia por guías (30 días · ${d.ganancia.guiasMes})`} valor={fmt(d.ganancia.mes)} color="#818CF8" icono="dinero" />
+        {d.ganancia && <Kpi titulo={`Ganancia por guías (30 días · ${d.ganancia.guiasMes})`} valor={fmt(d.ganancia.mes)} color="#818CF8" icono="dinero" />}
       </div>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         {subTab('productos', 'Productos', 'paquete', '#A78BFA')}
         {subTab('bodegas', 'Bodegas', 'bodega', '#60A5FA', d.bodegas.filter((b) => b.productos > 0 && b.faltan.length).length)}
-        {subTab('billeteras', 'Billeteras y retiros', 'billetera', '#34D399', pendRetiros)}
+        {d.billeteras && subTab('billeteras', 'Billeteras y retiros', 'billetera', '#34D399', pendRetiros)}
         {subTab('despachos', 'Despachos', 'despachar', '#FB923C', conProblema)}
       </div>
       {sub === 'productos' && <Productos d={d} onCambio={cargar} />}
       {sub === 'bodegas' && <Bodegas d={d} onCambio={cargar} />}
-      {sub === 'billeteras' && <Billeteras d={d} onCambio={cargar} />}
+      {sub === 'billeteras' && d.billeteras && <Billeteras d={d} onCambio={cargar} />}
       {sub === 'despachos' && <Despachos d={d} onCambio={cargar} />}
     </div>
   );
@@ -80,7 +86,7 @@ function Cuenta({ cuenta, onCambio }: { cuenta: BodegaDFAdmin['cuenta']; onCambi
   return (
     <section style={{ ...card, padding: '16px 18px', display: 'grid', gap: 10 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800 }}>
-        <IconoColor color={ok ? '#34D399' : '#FBBF24'}><Icono nombre="antena" tam={17} /></IconoColor>Cuenta de Skydropx de DealFlow
+        <IconoColor color={ok ? '#34D399' : '#FBBF24'}><Icono nombre="antena" tam={17} /></IconoColor>Cuenta de envíos de DealFlow (Skydropx)
         <span style={{ marginLeft: 'auto', fontSize: 11.5, fontWeight: 800, padding: '2px 9px', borderRadius: 999, color: ok ? '#10B981' : '#D97706', background: ok ? 'rgba(16,185,129,.14)' : 'rgba(251,191,36,.16)' }}>{ok ? `Conectada · ${cuenta.ambiente === 'sandbox' ? 'pruebas' : 'producción'}` : 'Sin configurar'}</span>
       </div>
       {ok ? (
@@ -117,13 +123,14 @@ function Ajustes({ ajustes, onGuardado }: { ajustes: AjustesDF; onGuardado: (a: 
   );
   return (
     <section style={{ ...card, padding: '16px 18px', display: 'grid', gap: 10 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800 }}><IconoColor color="#FBBF24"><Icono nombre="ajustes" tam={17} /></IconoColor>Cobros de la bodega</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800 }}><IconoColor color="#FBBF24"><Icono nombre="ajustes" tam={17} /></IconoColor>Cobros de Envíos DealFlow</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10 }}>
         {campo('comisionPct', 'Comisión de recaudo (%)', 'Se descuenta del valor que paga el cliente contra entrega')}
         {campo('comisionFija', 'Comisión fija ($)', 'Valor fijo por pedido entregado contra entrega')}
         {campo('fleteDevolucionPct', 'Flete de devolución (% del envío)', '100 = se cobra lo mismo que costó el envío de ida')}
-        {campo('tarifaTienda', 'Tarifa por guía a la tienda ($)', 'Se descuenta de la billetera de la tienda en cada guía')}
-        {campo('tarifaProveedor', 'Tarifa por guía al proveedor ($)', 'Se descuenta de lo que DealFlow le paga al proveedor')}
+        {campo('tarifaTienda', 'Guía DealShop · a la tienda ($)', 'Se descuenta de la billetera de la tienda en cada guía de DealShop')}
+        {campo('tarifaProveedor', 'Guía DealShop · al proveedor ($)', 'Se descuenta de lo que DealFlow le paga al proveedor')}
+        {campo('tarifaPropia', 'Guía de productos propios ($)', 'Servicio por guía cuando la tienda despacha sus propios productos con Envíos DealFlow')}
         {campo('recargaMin', 'Recarga mínima ($)', '')}
         {campo('retiroMin', 'Retiro mínimo ($)', '')}
       </div>
@@ -142,7 +149,7 @@ function Productos({ d, onCambio }: { d: BodegaDFAdmin; onCambio: () => void }) 
   return (
     <section style={{ ...card, overflow: 'hidden' }}>
       <div style={{ padding: '12px 14px', display: 'flex', gap: 10, alignItems: 'center', borderBottom: '1px solid var(--df-border)' }}>
-        <span style={{ fontSize: 13.5, color: 'var(--df-text-muted)', flex: 1 }}>Marca qué productos de la Biblioteca despacha DealFlow. Las tiendas los ven con su costo por unidad.</span>
+        <span style={{ fontSize: 13.5, color: 'var(--df-text-muted)', flex: 1 }}>Marca qué productos de la Biblioteca son de DealShop, de qué bodega salen y cuánto cuestan. Las tiendas los ven en DealShop con su costo por unidad.</span>
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar producto…" style={{ ...input, maxWidth: 240, borderRadius: 999 }} />
       </div>
       {!lista.length && <div style={{ padding: 30, textAlign: 'center', color: 'var(--df-text-muted)' }}>No hay productos en la Biblioteca todavía.</div>}
@@ -180,7 +187,7 @@ function FilaProducto({ p, d, abierto, onAbrir, onGuardado }: { p: ProductoDFAdm
       {abierto && (
         <div className="df-pop" style={{ padding: '4px 16px 16px', display: 'grid', gap: 12 }}>
           <label style={{ display: 'inline-flex', gap: 8, alignItems: 'center', fontWeight: 700, fontSize: 13.5, cursor: 'pointer' }}>
-            <input type="checkbox" checked={f.activo} onChange={(e) => setF({ ...f, activo: e.target.checked })} /> Lo despacha la Bodega DealFlow
+            <input type="checkbox" checked={f.activo} onChange={(e) => setF({ ...f, activo: e.target.checked })} /> Es de DealShop (lo despacha DealFlow)
           </label>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
             <label style={etiqueta}>Proveedor (bodega)
@@ -231,7 +238,21 @@ function FormBodega({ b, onCambio }: { b: BodegaDFAdmin['bodegas'][number]; onCa
         <IconoColor color="#60A5FA"><Icono nombre="bodega" tam={17} /></IconoColor>{b.nombre}
         <span style={{ marginLeft: 'auto' }}>{b.faltan.length ? <Chip color="#FBBF24" icono="alerta">Falta {b.faltan.join(', ')}</Chip> : <Chip color="#34D399" icono="ok">Lista</Chip>}</span>
       </div>
-      <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>{b.email} · {b.productos} producto{b.productos === 1 ? '' : 's'} de la bodega</div>
+      <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>{b.email} · {b.productos} producto{b.productos === 1 ? '' : 's'} de DealShop</div>
+      {b.cuentas && b.cuentas.guias > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+          {[
+            { t: 'Guías', v: String(b.cuentas.guias), c: '#60A5FA' },
+            { t: 'Entregados', v: String(b.cuentas.entregados), c: '#34D399' },
+            { t: 'Le debemos', v: fmt(b.cuentas.debemos), c: b.cuentas.debemos < 0 ? '#F87171' : '#A78BFA' },
+          ].map((x) => (
+            <div key={x.t} style={{ borderRadius: 9, padding: '6px 8px', background: `color-mix(in srgb, ${x.c} 10%, transparent)` }}>
+              <div style={{ fontSize: 11, color: 'var(--df-text-muted)', fontWeight: 700 }}>{x.t}</div>
+              <div style={{ fontWeight: 800, fontSize: 14, color: x.c }}>{x.v}</div>
+            </div>
+          ))}
+        </div>
+      )}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
         {campo('empresa', 'Empresa', b.nombre)}{campo('telefono', 'Celular de la bodega', '3001234567')}
         {campo('departamento', 'Departamento')}{campo('ciudad', 'Ciudad')}
@@ -244,7 +265,8 @@ function FormBodega({ b, onCambio }: { b: BodegaDFAdmin['bodegas'][number]; onCa
   );
 }
 
-function Billeteras({ d, onCambio }: { d: BodegaDFAdmin; onCambio: () => void }) {
+function Billeteras({ d: d0, onCambio }: { d: BodegaDFAdmin; onCambio: () => void }) {
+  const d = { ...d0, billeteras: d0.billeteras! };
   const [aj, setAj] = useState({ storeId: '', monto: '', motivo: '' });
   const [nota, setNota] = useState<Record<string, string>>({});
   const resolver = async (id: string, estado: 'pagado' | 'rechazado', monto: number, tienda: string) => {

@@ -3,6 +3,7 @@ import { Icono, IcoTexto } from '../components/Icono';
 import { useEffect, useRef, useState } from 'react';
 import { EffiApiCard } from '../components/EffiApiCard';
 import { SkydropxCard } from '../components/SkydropxCard';
+import { EnviosDFCard } from '../components/EnviosDF';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import { Dropdown } from '../components/Dropdown';
 import { IntegracionFila, LogoInteg } from '../components/IntegracionFila';
@@ -441,6 +442,7 @@ export function Integraciones({ df }: { df: DealFlowState }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {g.id === 'envios' && <EffiApiCard df={df} />}
               {g.id === 'envios' && <DropiApiCard df={df} />}
+              {g.id === 'envios' && <EnviosDFCard irBilletera={() => df.go('billetera')} />}
               {g.id === 'envios' && <SkydropxCard />}
               {g.id === 'envios' && <ShopifyCard df={df} />}
               {g.id === 'envios' && <ImportarLucidCard />}

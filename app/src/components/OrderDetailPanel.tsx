@@ -17,6 +17,7 @@ import { apiDropiCotizar, apiDropiCrear, apiEffiPreview, apiEffiDespachar, apiEf
 
 import { apiSkydropxCotizar, apiSkydropxCrear, apiSkydropxCancelar, apiSkydropxMunicipio, type TarifaSkydropx, type ElegirMunicipioSkydropx } from '../lib/api';
 import { useSkydropx, LogoSkydropx } from './SkydropxCard';
+import { useEnviosDF, EnviosDFDespacho, LogoDealFlow } from './EnviosDF';
 import { useBodegas } from './BodegasProveedores';
 import { apiBodegaPedido, apiGuiaProveedorReenviar } from '../lib/api';
 import { fmtCO } from '../lib/fechaCO';
@@ -1037,22 +1038,27 @@ export function DespachoPedido({ df, sel }: { df: DealFlowState; sel: DecoratedO
   const dropiOk = !!df.dropiConectado;
   const sky = useSkydropx();
   const skyOk = !!sky?.conectado;
-  const [prov, setProv] = useState<'effi' | 'dropi' | 'skydropx' | ''>('');
+  const [env] = useEnviosDF();
+  const dfOk = !!env?.activo;
+  const [prov, setProv] = useState<'effi' | 'dropi' | 'skydropx' | 'dealflow' | ''>('');
   // Por defecto, por quién se despacha el producto del pedido (si está conectado); si no, el primero conectado.
   const provProductos = new Set((sel.items || []).map((i) => df.products.find((p) => String(p.id) === String(i.productId))?.despachoProveedor || '').filter(Boolean));
   const provProducto = provProductos.has('skydropx') && skyOk ? 'skydropx' : provProductos.has('dropi') && dropiOk ? 'dropi' : provProductos.has('effi') && effiOk ? 'effi' : '';
-  const elegido = prov || provProducto || (effiOk ? 'effi' : dropiOk ? 'dropi' : skyOk ? 'skydropx' : '');
+  const elegido = prov || provProducto || (effiOk ? 'effi' : dropiOk ? 'dropi' : skyOk ? 'skydropx' : dfOk ? 'dealflow' : '');
   const dropiCreado = sel.despachoProveedor === 'dropi';
-  const skyCreado = sel.despachoProveedor === 'skydropx';
+  // Envíos DealFlow (DealShop o productos propios): se muestra como DealFlow, nunca como Skydropx ni Effi.
+  const dfCreado = sel.despachoProveedor === 'bodega_df';
+  const skyCreado = sel.despachoProveedor === 'skydropx' || dfCreado;
 
   // Cancela el envío en Skydropx; el pedido queda listo para corregirlo y volver a despacharlo.
   const cancelarSky = async () => {
     if (!sel.rowId) return;
-    const motivo = await pedirTexto({ titulo: `¿Cancelar en Skydropx el envío de ${sel.id}?`, mensaje: 'Se cancela la guía en Skydropx y el pedido queda listo para corregirlo y volver a despacharlo. Si la transportadora ya recogió el paquete, Skydropx no deja cancelar.', placeholder: 'Motivo (ej. corregir dirección)', valor: 'Corregir datos del pedido', aceptar: 'Cancelar envío' });
+    const marca = dfCreado ? 'DealFlow' : 'Skydropx';
+    const motivo = await pedirTexto({ titulo: `¿Cancelar ${dfCreado ? 'con DealFlow' : 'en Skydropx'} el envío de ${sel.id}?`, mensaje: `Se cancela la guía y el pedido queda listo para corregirlo y volver a despacharlo.${dfCreado ? ' Te devolvemos a la billetera lo que se descontó.' : ''} Si la transportadora ya recogió el paquete, ${marca} no deja cancelar.`, placeholder: 'Motivo (ej. corregir dirección)', valor: 'Corregir datos del pedido', aceptar: 'Cancelar envío' });
     if (motivo === null) return;
-    const r = await enProceso('Cancelando en Skydropx…', () => apiSkydropxCancelar(sel.rowId!, motivo), 'pedido');
+    const r = await enProceso(`Cancelando en ${marca}…`, () => apiSkydropxCancelar(sel.rowId!, motivo), 'pedido');
     if (r.error) return notificar(r.error, 'error', 9000);
-    notificar('✓ Envío cancelado en Skydropx. Corrige el pedido y vuelve a despacharlo.', 'ok', 7000);
+    notificar(`✓ Envío cancelado${dfCreado ? '' : ' en Skydropx'}. Corrige el pedido y vuelve a despacharlo.`, 'ok', 7000);
     await df.recargarPedidos();
   };
 
@@ -1072,11 +1078,11 @@ export function DespachoPedido({ df, sel }: { df: DealFlowState; sel: DecoratedO
     return (
       <div style={{ border: '1px solid var(--df-border)', borderRadius: 12, padding: '14px', marginBottom: 18 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          {skyCreado ? <LogoSkydropx px={30} /> : dropiCreado
+          {dfCreado ? <LogoDealFlow px={30} /> : skyCreado ? <LogoSkydropx px={30} /> : dropiCreado
             ? <img src="/logos/dropi.jpg" alt="Dropi" style={{ width: 30, height: 30, borderRadius: 8, objectFit: 'cover' }} />
             : <span style={{ width: 30, height: 30, borderRadius: 8, background: '#fff', border: '1px solid var(--df-border)', display: 'grid', placeItems: 'center', padding: 3, boxSizing: 'border-box' }}><img src="/logos/effi.png" alt="Effi" style={{ maxWidth: '100%', maxHeight: '100%' }} /></span>}
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontWeight: 800, fontSize: 14 }}>Enviado a {skyCreado ? 'Skydropx' : dropiCreado ? 'Dropi' : 'Effi'}</div>
+            <div style={{ fontWeight: 800, fontSize: 14 }}>{dfCreado ? 'Enviado con DealFlow' : `Enviado a ${skyCreado ? 'Skydropx' : dropiCreado ? 'Dropi' : 'Effi'}`}</div>
             <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>Estado: <b style={{ color: 'var(--df-text-strong)' }}>{sel.estadoWoo || (sel.hasGuia ? 'guía generada' : 'esperando guía…')}</b></div>
           </div>
           <button onClick={sel.sincronizarEffi} style={{ ...btnS, color: 'var(--df-brand-dark)', borderColor: 'var(--df-brand)' }}>↻ Actualizar</button>
@@ -1110,13 +1116,13 @@ export function DespachoPedido({ df, sel }: { df: DealFlowState; sel: DecoratedO
               style={{ background: 'transparent', border: 'none', color: 'var(--df-danger)', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer', textDecoration: 'underline', whiteSpace: 'nowrap' }}>Anular en Effi</button>
           )}
           {df.puede('despachar') && skyCreado && (
-            <button onClick={() => void cancelarSky()} title="Cancela la guía en Skydropx para corregir el pedido y volver a despacharlo"
-              style={{ background: 'transparent', border: 'none', color: 'var(--df-danger)', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer', textDecoration: 'underline', whiteSpace: 'nowrap' }}>Cancelar en Skydropx</button>
+            <button onClick={() => void cancelarSky()} title="Cancela la guía para corregir el pedido y volver a despacharlo"
+              style={{ background: 'transparent', border: 'none', color: 'var(--df-danger)', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer', textDecoration: 'underline', whiteSpace: 'nowrap' }}>{dfCreado ? 'Cancelar envío' : 'Cancelar en Skydropx'}</button>
           )}
           {df.puede('despachar') && !skyCreado && <button onClick={() => setRedespachar(true)} style={{ background: 'transparent', border: 'none', color: 'var(--df-text-muted)', fontFamily: 'inherit', fontWeight: 600, fontSize: 12, cursor: 'pointer', textDecoration: 'underline', whiteSpace: 'nowrap' }}>Volver a despachar</button>}
         </div>
         {df.effiMsg && <div style={{ marginTop: 8, fontSize: 12.5, color: df.effiMsg.startsWith('✓') || df.effiMsg.startsWith('Estado') ? 'var(--df-purple)' : df.effiMsg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{df.effiMsg}</div>}
-        {skyCreado && !!sel.bodegaId && <GuiaAlProveedor df={df} sel={sel} />}
+        {skyCreado && !dfCreado && !!sel.bodegaId && <GuiaAlProveedor df={df} sel={sel} />}
       </div>
     );
   }
@@ -1129,10 +1135,10 @@ export function DespachoPedido({ df, sel }: { df: DealFlowState; sel: DecoratedO
     );
   }
 
-  if (!effiOk && !dropiOk && !skyOk) {
+  if (!effiOk && !dropiOk && !skyOk && !dfOk) {
     return (
       <div style={{ border: '1px dashed var(--df-border-strong)', borderRadius: 12, padding: 16, marginBottom: 18, textAlign: 'center', color: 'var(--df-text-muted)', fontSize: 13 }}>
-        Conecta <b>Effi</b>, <b>Dropi</b> o <b>Skydropx</b> en <b>Integraciones</b> para despachar este pedido con un toque.
+        Activa <b>Envíos DealFlow</b> o conecta <b>Effi</b>, <b>Dropi</b> o <b>Skydropx</b> en <b>Integraciones</b> para despachar este pedido con un toque.
       </div>
     );
   }
@@ -1147,6 +1153,15 @@ export function DespachoPedido({ df, sel }: { df: DealFlowState; sel: DecoratedO
         </div>
       )}
       <div role="radiogroup" aria-label="Con quién despachar" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 8 }}>
+        {dfOk && (
+          <button role="radio" aria-checked={elegido === 'dealflow'} onClick={() => setProv('dealflow')} style={tarjetaProv(elegido === 'dealflow', true)}>
+            <LogoDealFlow px={24} />
+            <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
+              <b style={{ fontSize: 13.5, color: 'var(--df-text-strong)' }}>DealFlow</b>
+              <span style={{ fontSize: 11, color: 'var(--df-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Envíos DealFlow · recauda por ti</span>
+            </span>
+          </button>
+        )}
         <button role="radio" aria-checked={elegido === 'effi'} onClick={() => effiOk && setProv('effi')} style={tarjetaProv(elegido === 'effi', effiOk)}>
           <span style={{ width: 24, height: 24, borderRadius: 7, background: '#fff', border: '1px solid var(--df-border)', display: 'grid', placeItems: 'center', padding: 3, boxSizing: 'border-box', flexShrink: 0 }}><img src="/logos/effi.png" alt="" style={{ maxWidth: '100%', maxHeight: '100%' }} /></span>
           <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
@@ -1175,6 +1190,7 @@ export function DespachoPedido({ df, sel }: { df: DealFlowState; sel: DecoratedO
       {elegido === 'effi' && effiApiListo && <EffiApiDespacho df={df} sel={sel} reintentar={redespachar} onHecho={() => setRedespachar(false)} />}
       {elegido === 'dropi' && <DropiDespacho df={df} sel={sel} onHecho={() => setRedespachar(false)} />}
       {elegido === 'skydropx' && skyOk && <SkydropxDespacho df={df} sel={sel} onHecho={() => setRedespachar(false)} />}
+      {elegido === 'dealflow' && dfOk && sel.rowId && <EnviosDFDespacho rowId={sel.rowId} onHecho={() => { setRedespachar(false); void df.recargarPedidos(); }} />}
     </div>
   );
 }

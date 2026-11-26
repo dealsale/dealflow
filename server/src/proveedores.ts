@@ -206,6 +206,12 @@ function pedidosDe(convenios: string[], desde: string, hasta: string, soloId = '
   }
   filas.sort((a, b) => txt(b.created_at).localeCompare(txt(a.created_at)));
   const ult = db.prepare('SELECT fecha, estado, observacion FROM guia_historial WHERE order_id = ? ORDER BY fecha DESC LIMIT 1');
+  // Recorrido de la guía (DealShop): solo los cambios de estado de la transportadora, sin datos de cobro de la tienda.
+  const evs = db.prepare("SELECT titulo, created_at FROM order_eventos WHERE order_id = ? AND etapa = 'despacho' AND (titulo LIKE '%→%' OR titulo LIKE '%generó la guía%') ORDER BY id LIMIT 40");
+  const recorridoDe = (id: string) => (evs.all(id) as { titulo: string; created_at: string }[]).map((e) => {
+    const m = /→\s*(.+)$/.exec(e.titulo);
+    return { at: e.created_at, texto: m ? m[1].trim() : e.titulo.replace(/^(DealFlow Envíos|Skydropx)\s*/, '').replace(/^generó/, 'Se generó') };
+  });
   return filas.map((o) => {
     const items = itemsDe.all(txt(o.id)) as Fila[];
     const mov = ult.get(txt(o.id)) as Fila | undefined;
@@ -221,6 +227,7 @@ function pedidosDe(convenios: string[], desde: string, hasta: string, soloId = '
       guia: txt(o.guia), guiaUrl: txt(o.guia_url), transportadora: txt(o.guia) ? txt(o.transportadora) : '', remision: txt(o.effi_remision),
       total: Number(o.total) || 0,
       items: items.map((i) => ({ qty: Number(i.qty) || 0, nombre: txt(i.nombre) })),
+      recorrido: bodegaDF ? recorridoDe(txt(o.id)) : [],
       unidades: items.reduce((a, i) => a + (Number(i.qty) || 0), 0),
       ultimoMovimiento: mov ? { fecha: txt(mov.fecha), estado: txt(mov.estado), observacion: txt(mov.observacion) } : null,
     };
@@ -302,7 +309,9 @@ export function pedidoProveedor(convenios: string[], orderId: string, provId = '
     .map((e) => ({ etapa: txt(e.etapa), titulo: txt(e.titulo), fecha: txt(e.created_at) }));
   const info = pj<Fila>(txt(o.effi_guia_info), {});
   const buscar = (patron: RegExp) => { for (const [k, v] of Object.entries(info)) if (patron.test(k) && v != null && typeof v !== 'object' && txt(v)) return txt(v); return ''; };
-  return { ...p, entregaEstimada: buscar(/fecha.*(entrega|estimad)|(entrega|estimad).*fecha/i).slice(0, 10), recorrido, novedades, traza };
+  // DealShop: el recorrido sale de los estados que reporta la transportadora (más reciente primero).
+  const recorridoFinal = recorrido.length ? recorrido : [...p.recorrido].reverse().map((e) => ({ fecha: e.at, estado: e.texto, observacion: '', foto: '' }));
+  return { ...p, entregaEstimada: buscar(/fecha.*(entrega|estimad)|(entrega|estimad).*fecha/i).slice(0, 10), recorrido: recorridoFinal, novedades, traza };
 }
 
 // ── Sesión del proveedor ─────────────────────────────────────────────────────

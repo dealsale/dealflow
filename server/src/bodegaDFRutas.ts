@@ -6,8 +6,10 @@
  * La recarga con Bold está en routes.ts (/api/billetera/recargar), junto a los otros cobros.
  */
 import type { Router } from 'express';
-import { requireAuth, requireOwner, requireStore, requireSuperAdmin } from './auth.js';
+import { requireAuth, requireAdmin, requireOwner, requireStore, requireSuperAdmin } from './auth.js';
+import { requirePermiso } from './roles.js';
 import * as B from './bodegaDF.js';
+import * as E from './enviosDF.js';
 
 export function rutasBodegaDF(api: Router) {
   // ── Tienda ──
@@ -31,22 +33,47 @@ export function rutasBodegaDF(api: Router) {
     res.json(r);
   });
 
-  // ── Superadmin ──
+  // ── Envíos DealFlow (integración de la tienda) ──
+  api.get('/envios-df', requireAuth, requireStore, async (req, res) => { res.json(await E.estadoEnviosDF(req.user!.storeId!)); });
+  api.post('/envios-df/activar', requireAuth, requireStore, requireOwner, (req, res) => {
+    const r = E.activarEnviosDF(req.user!.storeId!, req.body?.acepto === true, req.user!.nombre || req.user!.email);
+    if ('error' in r) return res.status(400).json(r);
+    res.json(r);
+  });
+  api.post('/envios-df/desactivar', requireAuth, requireStore, requireOwner, (req, res) => { E.desactivarEnviosDF(req.user!.storeId!, req.user!.nombre || req.user!.email); res.json({ ok: true }); });
+  api.put('/envios-df/origen', requireAuth, requireStore, requireOwner, (req, res) => {
+    const r = E.guardarOrigenTienda(req.user!.storeId!, req.body?.origen || {}, req.body?.paquete || {});
+    if ('error' in r) return res.status(400).json(r);
+    res.json(r);
+  });
+  api.post('/orders/:rowId/envios-df/cotizar', requireAuth, requireStore, requirePermiso('despachar'), async (req, res) => {
+    const r = await E.cotizarPropio(req.user!.storeId!, String(req.params.rowId));
+    if ('error' in r) return res.status(400).json(r);
+    res.json(r);
+  });
+  api.post('/orders/:rowId/envios-df/despachar', requireAuth, requireStore, requirePermiso('despachar'), async (req, res) => {
+    const r = await E.despacharPropio(req.user!.storeId!, String(req.params.rowId), String(req.body?.tarifaId || ''), req.user!.nombre || req.user!.email);
+    if ('error' in r) return res.status(400).json(r);
+    res.json(r);
+  });
+
+  // ── Superadmin y admin (DealShop). Lo de dinero (billeteras, retiros, ajustes): solo superadmin ──
   const quien = (req: { user?: { nombre?: string; email?: string } }) => req.user?.nombre || req.user?.email || 'superadmin';
-  api.get('/superadmin/bodega-df', requireAuth, requireSuperAdmin, async (_req, res) => {
+  api.get('/superadmin/bodega-df', requireAuth, requireAdmin, async (req, res) => {
+    const sa = req.user!.role === 'SUPERADMIN';
     res.json({
       cuenta: await B.estadoCuentaDF(false), ajustes: B.ajustesDF(), bodegas: B.listarBodegasAdmin(),
-      productos: B.listarProductosDFAdmin(), billeteras: B.billeterasAdmin(), despachos: B.despachosAdmin(), ganancia: B.gananciaGuiasDF(),
+      productos: B.listarProductosDFAdmin(), billeteras: sa ? B.billeterasAdmin() : null, despachos: B.despachosAdmin(), ganancia: sa ? B.gananciaGuiasDF() : null, esSuper: sa,
     });
   });
   api.post('/superadmin/bodega-df/verificar', requireAuth, requireSuperAdmin, async (_req, res) => { res.json(await B.estadoCuentaDF(true)); });
   api.put('/superadmin/bodega-df/ajustes', requireAuth, requireSuperAdmin, (req, res) => { res.json(B.guardarAjustesDF(req.body || {})); });
-  api.put('/superadmin/bodega-df/bodegas/:id', requireAuth, requireSuperAdmin, (req, res) => {
+  api.put('/superadmin/bodega-df/bodegas/:id', requireAuth, requireAdmin, (req, res) => {
     const r = B.guardarBodegaProveedor(String(req.params.id), req.body || {});
     if ('error' in r) return res.status(400).json(r);
     res.json(r);
   });
-  api.put('/superadmin/bodega-df/productos/:id', requireAuth, requireSuperAdmin, (req, res) => {
+  api.put('/superadmin/bodega-df/productos/:id', requireAuth, requireAdmin, (req, res) => {
     const r = B.guardarProductoDF(String(req.params.id), req.body || {});
     if ('error' in r) return res.status(400).json(r);
     res.json(r);
@@ -62,7 +89,7 @@ export function rutasBodegaDF(api: Router) {
     if ('error' in r) return res.status(400).json(r);
     res.json(r);
   });
-  api.post('/superadmin/bodega-df/pedidos/:storeId/:id/despachar', requireAuth, requireSuperAdmin, async (req, res) => {
+  api.post('/superadmin/bodega-df/pedidos/:storeId/:id/despachar', requireAuth, requireAdmin, async (req, res) => {
     const r = await B.despacharDF(String(req.params.storeId), String(req.params.id), { manual: true });
     if ('error' in r) return res.status(400).json(r);
     res.json(r);

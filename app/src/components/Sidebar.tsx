@@ -178,6 +178,7 @@ export function Sidebar({ df }: { df: DealFlowState }) {
               <span>Drive del equipo</span>
             </a>
             {!df.isSoporte && <>
+            {adminItem('dealshop', <IconDealShop />, 'DealShop')}
             {adminItem('proveedores', <Icono nombre="aliado" tam={17} grosor={1.8} />, 'Proveedores')}
             {adminItem('estudio', <Icono nombre="estudio" tam={17} grosor={1.8} />, 'Estudio IA')}
             {df.isSuperadmin && adminItem('contabilidad', <IconVentas />, 'Contabilidad')}

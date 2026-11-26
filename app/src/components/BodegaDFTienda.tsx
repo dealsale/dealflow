@@ -7,7 +7,7 @@ import { fmtCO } from '../lib/fechaCO';
 import { apiBodegaDF, apiDespacharDF, apiRecargarBilletera, apiResolverEscaladoDF, apiRetiroBilletera, type BodegaDFTienda, type PedidoDF } from '../lib/api';
 
 /*
- * Bodega DealFlow (vista de la tienda): billetera en pesos, recarga con Bold, retiros y los
+ * DealShop · Billetera y pedidos (vista de la tienda): billetera en pesos, recarga con Bold, retiros y los
  * pedidos que despacha DealFlow con sus productos de la Biblioteca.
  */
 
@@ -25,7 +25,7 @@ const MOV: Record<string, { color: string; icono: NombreIcono }> = {
 /** Color del estado de cada pedido de la bodega. */
 const EST: Record<string, { color: string; icono: NombreIcono }> = {
   pendiente: { color: '#60A5FA', icono: 'pendiente' }, sin_saldo: { color: '#FBBF24', icono: 'billetera' }, error: { color: '#F87171', icono: 'alerta' },
-  mixto: { color: '#FB923C', icono: 'alerta' }, despachado: { color: '#A78BFA', icono: 'despachar' }, liquidado: { color: '#34D399', icono: 'entregado' }, cancelado: { color: '#94A3B8', icono: 'error' },
+  mixto: { color: '#FB923C', icono: 'alerta' }, sin_activar: { color: '#FBBF24', icono: 'candado' }, despachado: { color: '#A78BFA', icono: 'despachar' }, liquidado: { color: '#34D399', icono: 'entregado' }, cancelado: { color: '#94A3B8', icono: 'error' },
 };
 
 export function BodegaDFTiendaPanel() {
@@ -37,7 +37,7 @@ export function BodegaDFTiendaPanel() {
   const [ocupado, setOcupado] = useState('');
   const [respuesta, setRespuesta] = useState<Record<string, string>>({});
 
-  const cargar = () => void apiBodegaDF().then((r) => { if (r.data) { setD(r.data); setError(''); } else setError(r.error || 'No se pudo cargar la bodega.'); });
+  const cargar = () => void apiBodegaDF().then((r) => { if (r.data) { setD(r.data); setError(''); } else setError(r.error || 'No se pudo cargar la billetera.'); });
   useEffect(() => {
     cargar();
     // Al volver de pagar la recarga, el saldo se actualiza solo en cuanto Bold confirma.
@@ -82,7 +82,7 @@ export function BodegaDFTiendaPanel() {
 
   const abiertos = useMemo(() => (d?.pedidos || []).filter((p) => p.escalado && !p.escalado.resuelto), [d]);
   if (error) return <div style={{ ...card, padding: 24, color: 'var(--df-danger)' }}>{error}</div>;
-  if (!d) return <div style={{ ...card, padding: 30, textAlign: 'center', color: 'var(--df-text-muted)' }}>Cargando tu bodega…</div>;
+  if (!d) return <div style={{ ...card, padding: 30, textAlign: 'center', color: 'var(--df-text-muted)' }}>Cargando tu billetera…</div>;
   const enCamino = d.pedidos.filter((p) => p.dfEstado === 'despachado').length;
   const esperando = d.pedidos.filter((p) => p.dfEstado === 'sin_saldo').length;
 
@@ -91,7 +91,7 @@ export function BodegaDFTiendaPanel() {
       {!d.listo && (
         <div style={{ ...card, padding: '12px 16px', borderColor: 'var(--df-warning-border, var(--df-border))', background: 'var(--df-warning-subtle)', fontSize: 13.5, display: 'flex', gap: 10, alignItems: 'center' }}>
           <IconoColor color="#FBBF24"><Icono nombre="pendiente" tam={18} /></IconoColor>
-          La Bodega DealFlow se está activando. Ya puedes recargar tu billetera; los despachos salen en cuanto quede lista.
+          Envíos DealFlow se está activando. Ya puedes recargar tu billetera; los despachos salen en cuanto quede listo.
         </div>
       )}
 
@@ -160,7 +160,7 @@ export function BodegaDFTiendaPanel() {
       {/* Pedidos / movimientos */}
       <section style={{ ...card, overflow: 'hidden' }}>
         <div style={{ display: 'flex', gap: 6, padding: '12px 14px', borderBottom: '1px solid var(--df-border)', alignItems: 'center', flexWrap: 'wrap' }}>
-          {([['pedidos', `Pedidos de la bodega · ${d.pedidos.length}`, 'paquete', '#A78BFA'], ['movimientos', `Movimientos · ${d.movimientos.length}`, 'billetera', '#34D399']] as const).map(([v, t, ic, col]) => (
+          {([['pedidos', `Pedidos con DealFlow · ${d.pedidos.length}`, 'paquete', '#A78BFA'], ['movimientos', `Movimientos · ${d.movimientos.length}`, 'billetera', '#34D399']] as const).map(([v, t, ic, col]) => (
             <button key={v} onClick={() => setVista(v)} style={{ ...btn, borderRadius: 999, padding: '7px 13px', background: vista === v ? 'var(--df-brand-subtle-2)' : 'var(--df-surface)', borderColor: vista === v ? 'var(--df-brand)' : 'var(--df-border)' }}>
               <IconoColor color={col}><Icono nombre={ic} tam={15} /></IconoColor>{t}
             </button>
@@ -171,18 +171,19 @@ export function BodegaDFTiendaPanel() {
         {vista === 'pedidos' ? (
           d.pedidos.length ? d.pedidos.map((p) => {
             const e = EST[p.dfEstado] || { color: '#94A3B8', icono: 'paquete' as NombreIcono };
-            const puedeDespachar = ['sin_saldo', 'error', 'cancelado', 'pendiente'].includes(p.dfEstado) && !p.guia && p.estado !== 'Cancelado';
+            const puedeDespachar = !p.propio && ['sin_saldo', 'error', 'cancelado', 'pendiente'].includes(p.dfEstado) && !p.guia && p.estado !== 'Cancelado';
             return (
               <div key={p.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', gap: 10, padding: '12px 16px', borderTop: '1px solid var(--df-border)', alignItems: 'center' }}>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                     <b>{p.codigo}</b><span style={{ color: 'var(--df-text-muted)', fontSize: 13 }}>{p.cliente} · {p.ciudad}</span>
+                    <Chip color={p.propio ? '#2e8bff' : '#A78BFA'} icono={p.propio ? 'casa' : 'bolsa'}>{p.propio ? 'Producto propio' : 'DealShop'}</Chip>
                     <Chip color={e.color} icono={e.icono}>{p.dfEstadoTexto}</Chip>
                     {p.estadoTransportadora && <Chip color="#60A5FA" icono="moto">{p.estadoTransportadora}</Chip>}
                   </div>
                   <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', marginTop: 3 }}>
                     {p.guia ? <>{p.transportadora} · guía <span style={{ fontFamily: 'ui-monospace, Menlo, monospace' }}>{p.guia}</span> · </> : null}
-                    {p.producto ? <>producto {fmt(p.producto)} + envío {fmt(p.envio)}{p.servicioTienda ? ` + guía ${fmt(p.servicioTienda)}` : ''}{p.cod ? ` · cobra al cliente ${fmt(p.recaudo)}` : ' · ya pagado'}</> : fecha(p.fecha)}
+                    {p.producto || p.propio ? <>{p.producto ? <>producto {fmt(p.producto)} + </> : null}envío {fmt(p.envio)}{p.servicioTienda ? ` + guía ${fmt(p.servicioTienda)}` : ''}{p.cod ? ` · cobra al cliente ${fmt(p.recaudo)}` : ' · ya pagado'}</> : fecha(p.fecha)}
                   </div>
                   {p.detalle && <div style={{ fontSize: 12.5, color: e.color, marginTop: 3, fontWeight: 600 }}>{p.detalle}</div>}
                 </div>
@@ -192,7 +193,7 @@ export function BodegaDFTiendaPanel() {
                 </div>
               </div>
             );
-          }) : <Vacio icono="paquete" texto="Todavía no tienes pedidos de la bodega. Importa un producto marcado «Despacha DealFlow» y véndelo: cuando el cliente confirme, sale solo." />
+          }) : <Vacio icono="paquete" texto="Todavía no tienes pedidos con DealFlow. Desbloquea un producto del catálogo de DealShop y véndelo (sale solo cuando el cliente confirma), o despacha un pedido tuyo con «DealFlow» desde el detalle del pedido." />
         ) : (
           d.movimientos.length ? d.movimientos.map((m) => {
             const c = MOV[m.tipo] || { color: '#94A3B8', icono: 'billetera' as NombreIcono };

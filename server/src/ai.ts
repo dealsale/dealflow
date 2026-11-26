@@ -1119,9 +1119,23 @@ function pedidoDesdeResumen(leadId: string): string {
   // Miramos bastante atrás: si el bot re-preguntó "¿confirmas?" varias veces, el
   // "Resumen de tu pedido" real pudo quedar varios mensajes atrás.
   // También la plantilla de confirmación que envió una persona desde el chat ("Pediste: … Dirección: …").
-  const rows = db.prepare("SELECT texto FROM messages WHERE lead_id = ? AND de IN ('bot','vendedor') AND texto != '' ORDER BY created_at DESC LIMIT 16").all(leadId) as { texto: string }[];
-  const resumen = rows.map((r) => r.texto).find((t) => /(resumen|summary|pediste|datos de env[ií]o)/i.test(t) && /(direcc|address|ciudad|city)/i.test(t));
-  if (!resumen) return '';
+  const rows = db.prepare("SELECT texto, created_at FROM messages WHERE lead_id = ? AND de IN ('bot','vendedor') AND texto != '' ORDER BY created_at DESC LIMIT 16").all(leadId) as { texto: string; created_at: string }[];
+  const fila = rows.find((r) => /(resumen|summary|pediste|datos de env[ií]o)/i.test(r.texto) && /(direcc|address|ciudad|city)/i.test(r.texto));
+  if (!fila) return '';
+  const resumen = fila.texto;
+  // Un resumen VIEJO no es una confirmación nueva. Antes, el «sí, gracias» al aviso de entrega
+  // tomaba el resumen del pedido ya entregado y volvía a crear el mismo pedido (guías repetidas).
+  // Solo sirve un resumen de las últimas 48 h y que sea MÁS NUEVO que el último pedido del cliente.
+  if (fila.created_at < (db.prepare("SELECT datetime('now','-48 hours') t").get() as { t: string }).t) return '';
+  {
+    const ld = db.prepare('SELECT store_id, tel, wa_id FROM leads WHERE id = ?').get(leadId) as { store_id: string; tel: string; wa_id: string } | undefined;
+    const tels = [...new Set([ld?.tel, ld?.wa_id].map((t) => String(t || '').replace(/\D/g, '').slice(-10)).filter((t) => t.length === 10))];
+    const yaHay = ld && db.prepare(
+      `SELECT 1 FROM orders WHERE store_id = ? AND estado != 'Cancelado' AND created_at >= datetime(?, '-10 minutes')
+         AND (lead_id = ? ${tels.map(() => "OR substr(REPLACE(REPLACE(REPLACE(REPLACE(tel,' ',''),'+',''),'-',''),'(',''), -10) = ?").join(' ')}) LIMIT 1`,
+    ).get(ld.store_id, fila.created_at, leadId, ...tels);
+    if (yaHay) return '';
+  }
   const cliente = campoResumen(resumen, '(?:Nombre|Name)');
   const ciudad = campoResumen(resumen, '(?:Ciudad|City)');
   const direccion = campoResumen(resumen, '(?:Direcci|Address)');
@@ -1507,6 +1521,7 @@ export async function crearPedido(storeId: string, lead: { id: string; nombre: s
     marcarEnviado(mid, await sendWhatsappText(storeId, destino, msg, pn));
     return 'actualizado';
   }
+  let nuevoPermitido = false; // el cliente dijo «nuevo»: no se frena el pedido adicional
   // Pedido «protegido» de este cliente (con guía/remisión/Dropi, ya despachado, o de Shopify / a mano):
   // el asistente no lo toca ni crea otro encima. Mismos productos = es el mismo (no se hace nada);
   // otra cosa = se le pregunta si quiere un pedido NUEVO aparte o MODIFICAR el que tiene.
@@ -1523,6 +1538,7 @@ export async function crearPedido(storeId: string, lead: { id: string; nombre: s
       }
       if (cp.permiteNuevo(lead.id)) {
         cp.usarPermisoNuevo(lead.id);
+        nuevoPermitido = true;
         registrarLog(storeId, 'info', 'pedido', `${cliente} pidió un pedido NUEVO aparte de DF-${prot.numero}: se registra como pedido adicional.`, lead.id);
       } else {
         const msg = cp.preguntaNuevoOModificar(storeId, lead.id, prot, inner);
@@ -1534,10 +1550,36 @@ export async function crearPedido(storeId: string, lead: { id: string; nombre: s
     }
   }
 
+  // REPETIDO: mismos productos que un pedido de los últimos 20 días que ya tiene guía, va en camino o
+  // ya se entregó (el «protegido» de arriba no mira los entregados). Si el cliente no pidió «otro»
+  // claramente, no se crea; si lo pidió, se le pregunta primero (y su «nuevo» lo deja pasar).
+  if (!nuevoPermitido) {
+    const cp = await import('./cambiosPedido.js');
+    const rep = cp.pedidoRepetido(storeId, lead.id, tels, items.map((it, i) => ({ nombre: it.nombre, productId: idsItems[i]?.productId })));
+    if (rep) {
+      const num = `DF-${String(rep.numero)}`;
+      if (cp.permiteNuevo(lead.id)) {
+        cp.usarPermisoNuevo(lead.id);
+        nuevoPermitido = true;
+        registrarLog(storeId, 'info', 'pedido', `${cliente} pidió un pedido NUEVO igual a ${num}: se registra como pedido adicional.`, lead.id);
+      } else if (cp.pideOtraVez(lead.id, String(rep.created_at))) {
+        const msg = cp.preguntaPedidoRepetido(storeId, lead.id, rep, inner);
+        const mid = uid();
+        db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(mid, lead.id, 'bot', msg);
+        marcarEnviado(mid, await sendWhatsappText(storeId, destino, msg, pn));
+        return 'pregunta';
+      } else {
+        trazar(storeId, String(rep.id), { etapa: 'pedido', nivel: 'info', titulo: 'Se evitó un pedido repetido', detalle: `El asistente iba a registrar otra vez los mismos productos de ${num} (${String(rep.estado).toLowerCase()}) sin que el cliente pidiera otro. No se creó.`, datos: { marcador: inner } });
+        registrarLog(storeId, 'info', 'pedido', `Se evitó un pedido repetido: ${cliente} ya tiene ${num} con los mismos productos.`, lead.id);
+        return 'frenado';
+      }
+    }
+  }
+
   // FRENO: el cliente solo respondió «ok/gracias» a un aviso de su pedido (guía, en camino, en
   // oficina, entregado…), o tiene un reclamo abierto. Antes el asistente volvía a registrar la misma
   // compra (DF-2518 tras «Tu pedido ya te fue entregado» → «Ok») o convertía un reclamo en una venta.
-  {
+  if (!nuevoPermitido) {
     const cp = await import('./cambiosPedido.js');
     const freno = cp.frenoPedidoNuevo(storeId, lead.id, tels);
     if (freno) {

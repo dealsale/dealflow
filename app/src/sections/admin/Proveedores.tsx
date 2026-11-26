@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Icono, IcoTexto, IconoColor } from '../../components/Icono';
-import { BodegaDFAdminPanel } from '../../components/BodegaDFAdmin';
+import { Icono, IcoTexto } from '../../components/Icono';
 import type { CSSProperties } from 'react';
 import { apiBorrarProveedor, apiCrearProveedor, apiEditarProveedor, apiProveedores, apiVerComoProveedor, type ConvenioConocido, type ProveedorAcceso } from '../../lib/api';
 import { confirmar, notificar } from '../../components/dialogs';
@@ -194,22 +193,7 @@ function AccesosProveedores() {
   );
 }
 
-/** Administración → Proveedores: accesos al portal (convenios de Effi) y la Bodega DealFlow. */
+/** Administración → Proveedores: accesos al portal y convenios de Effi. La bodega de cada proveedor, sus productos y despachos están en Administración → DealShop. */
 export function Proveedores() {
-  const [tab, setTab] = useState<'accesos' | 'bodega'>(() => (window.location.hash === '#bodega' ? 'bodega' : 'accesos'));
-  const pestana = (id: 'accesos' | 'bodega', texto: string, icono: 'aliado' | 'bodega', color: string) => (
-    <button onClick={() => { setTab(id); history.replaceState(null, '', id === 'bodega' ? '#bodega' : '#'); }}
-      style={{ ...btn, display: 'inline-flex', alignItems: 'center', gap: 8, borderRadius: 999, padding: '8px 15px', fontSize: 13.5, borderColor: tab === id ? 'var(--df-brand)' : 'var(--df-border)', background: tab === id ? 'var(--df-brand-subtle-2)' : 'var(--df-surface)', color: tab === id ? 'var(--df-brand-dark)' : 'var(--df-text-secondary)' }}>
-      <IconoColor color={color}><Icono nombre={icono} tam={16} /></IconoColor>{texto}
-    </button>
-  );
-  return (
-    <>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
-        {pestana('accesos', 'Accesos y convenios', 'aliado', '#60A5FA')}
-        {pestana('bodega', 'Bodega DealFlow', 'bodega', '#A78BFA')}
-      </div>
-      {tab === 'bodega' ? <BodegaDFAdminPanel /> : <AccesosProveedores />}
-    </>
-  );
+  return <AccesosProveedores />;
 }

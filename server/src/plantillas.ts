@@ -401,3 +401,35 @@ export function listarPlantillas(storeId: string) {
     detalle: p.id === ID_V2 ? { instrucciones: INSTRUCCIONES_V2, reglas: REGLAS_V2, estilo: ESTILO_V2 } : null,
   }));
 }
+
+// ── Tipo de negocio: la plantilla viene preinstalada al crear la tienda ─────────
+// Cada tipo trae su plantilla (y más adelante su propio menú). Hoy solo E-commerce está disponible.
+try { db.exec("ALTER TABLE stores ADD COLUMN tipo_negocio TEXT NOT NULL DEFAULT ''"); } catch { /* ya existe */ }
+export interface TipoNegocio { id: string; nombre: string; descripcion: string; disponible: boolean; plantilla: string; color: string }
+export const TIPOS_NEGOCIO: TipoNegocio[] = [
+  { id: 'ecommerce', nombre: 'E-commerce', descripcion: 'Dropshipping y ventas por WhatsApp: el asistente vende, toma el pedido, lo confirma y lo despacha.', disponible: true, plantilla: ID_V2, color: '#10B981' },
+  { id: 'b2b', nombre: 'B2B · Mayoristas', descripcion: 'Ventas entre empresas: cotizaciones, pedidos por volumen y clientes recurrentes.', disponible: false, plantilla: '', color: '#6366F1' },
+  { id: 'soporte', nombre: 'Soporte técnico', descripcion: 'Atención de casos: diagnóstico, seguimiento de tickets y garantías.', disponible: false, plantilla: '', color: '#F59E0B' },
+];
+export function tipoNegocio(storeId: string): string {
+  const r = db.prepare('SELECT tipo_negocio FROM stores WHERE id = ?').get(storeId) as { tipo_negocio: string } | undefined;
+  return r?.tipo_negocio || 'ecommerce';
+}
+/** Al crear la tienda: queda como E-commerce con su plantilla instalada (sin tocar nada si ya tiene una). */
+export function preinstalarPlantilla(storeId: string, tipo = 'ecommerce'): void {
+  try {
+    const t = TIPOS_NEGOCIO.find((x) => x.id === tipo && x.disponible) || TIPOS_NEGOCIO[0];
+    db.prepare("UPDATE stores SET tipo_negocio = ? WHERE id = ? AND tipo_negocio = ''").run(t.id, storeId);
+    const tiene = db.prepare('SELECT 1 FROM installed_templates WHERE store_id = ? LIMIT 1').get(storeId);
+    if (!tiene && t.plantilla) instalarPlantilla(storeId, t.plantilla);
+  } catch (e) { console.error('[plantillas] preinstalar', storeId, e); }
+}
+/** Cambiar el tipo de negocio (solo los disponibles). Instala su plantilla si no la tiene. */
+export function elegirTipoNegocio(storeId: string, tipo: string): { ok: true } | { error: string } {
+  const t = TIPOS_NEGOCIO.find((x) => x.id === tipo);
+  if (!t) return { error: 'Tipo de negocio no válido.' };
+  if (!t.disponible) return { error: `${t.nombre} todavía no está disponible. Muy pronto.` };
+  db.prepare('UPDATE stores SET tipo_negocio = ? WHERE id = ?').run(t.id, storeId);
+  if (t.plantilla && !db.prepare('SELECT 1 FROM installed_templates WHERE store_id = ? AND template_id = ?').get(storeId, t.plantilla)) instalarPlantilla(storeId, t.plantilla);
+  return { ok: true };
+}

@@ -973,7 +973,7 @@ export interface MovBilletera { id: string; tipo: string; nombre: string; monto:
 export interface RetiroBilletera { id: string; monto: number; estado: string; nota: string; fecha: string; resuelto: string }
 export interface PedidoDF {
   id: string; codigo: string; tienda: string; storeId: string; cliente: string; ciudad: string; total: number; estado: string; dfEstado: string; dfEstadoTexto: string; detalle: string;
-  guia: string; guiaUrl: string; transportadora: string; estadoTransportadora: string; producto: number; envio: number; recaudo: number; cod: boolean; recogido: string; fecha: string; servicioTienda: number; servicio: number;
+  guia: string; guiaUrl: string; transportadora: string; estadoTransportadora: string; producto: number; envio: number; recaudo: number; cod: boolean; recogido: string; fecha: string; servicioTienda: number; servicio: number; propio?: boolean;
   escalado: { nota: string; at: string; respuesta: string; resuelto: string } | null;
 }
 export interface BodegaDFTienda {
@@ -988,7 +988,7 @@ export const apiDespacharDF = (id: string) => req<{ ok: true; guia: string }>(`/
 export const apiResolverEscaladoDF = (id: string, respuesta: string) => req<{ ok: true }>(`/api/bodega-df/pedidos/${encodeURIComponent(id)}/resolver`, 'POST', { respuesta });
 
 export interface BodegaProvDF { empresa: string; telefono: string; email: string; direccion: string; referencia: string; departamento: string; ciudad: string; nit: string }
-export interface AjustesDF { comisionPct: number; comisionFija: number; fleteDevolucionPct: number; recargaMin: number; retiroMin: number; tarifaTienda: number; tarifaProveedor: number }
+export interface AjustesDF { comisionPct: number; comisionFija: number; fleteDevolucionPct: number; recargaMin: number; retiroMin: number; tarifaTienda: number; tarifaProveedor: number; tarifaPropia: number }
 export interface ProductoDFAdmin {
   id: string; nombre: string; precio: number; visible: boolean; activo: boolean; proveedorId: string; costo: number; costos: Record<string, number>;
   paquete: { largo: number; ancho: number; alto: number; peso: number; contenido: string }; variantes: string[]; importos: number;
@@ -996,11 +996,12 @@ export interface ProductoDFAdmin {
 export interface BodegaDFAdmin {
   cuenta: { configurada: boolean; ambiente: string; clientId: string; webhook: string; verificacion: { ok: boolean; error?: string } | null };
   ajustes: AjustesDF;
-  bodegas: { id: string; nombre: string; email: string; activo: boolean; bodega: BodegaProvDF; faltan: string[]; productos: number }[];
+  bodegas: { id: string; nombre: string; email: string; activo: boolean; bodega: BodegaProvDF; faltan: string[]; productos: number; cuentas?: { entregados: number; debemos: number; guias: number; mesEntregados: number; mesDebemos: number } }[];
   productos: ProductoDFAdmin[];
-  billeteras: { tiendas: { storeId: string; tienda: string; saldo: number; ultimo: string }[]; retiros: { id: string; storeId: string; tienda: string; monto: number; datos: string; estado: string; nota: string; fecha: string; resuelto: string }[]; enCustodia: number; todasLasTiendas: { id: string; nombre: string }[] };
+  esSuper?: boolean;
+  billeteras: null | { tiendas: { storeId: string; tienda: string; saldo: number; ultimo: string }[]; retiros: { id: string; storeId: string; tienda: string; monto: number; datos: string; estado: string; nota: string; fecha: string; resuelto: string }[]; enCustodia: number; todasLasTiendas: { id: string; nombre: string }[] };
   despachos: PedidoDF[];
-  ganancia: { total: number; mes: number; guias: number; guiasMes: number };
+  ganancia: null | { total: number; mes: number; guias: number; guiasMes: number };
 }
 export const apiBodegaDFAdmin = () => req<BodegaDFAdmin>('/api/superadmin/bodega-df', 'GET');
 export const apiVerificarCuentaDF = () => req<BodegaDFAdmin['cuenta']>('/api/superadmin/bodega-df/verificar', 'POST');
@@ -1639,3 +1640,33 @@ export function apiMkBibliotecaSubir(archivo: File, alAvanzar?: (pct: number) =>
 }
 export const apiInstrucciones = () => reqBase<{ texto: string }>('/api/marketing/instrucciones', 'GET');
 export const apiGuardarInstrucciones = (texto: string) => reqBase<{ texto: string }>('/api/marketing/instrucciones', 'PUT', { texto });
+
+// ── Pedidos repetidos (la misma compra registrada dos veces) ──
+export interface ParRepetido {
+  repetido: { id: string; numero: string; estado: string; total: number; creado: string; guia: string; donde: string; items: string };
+  original: { id: string; numero: string; estado: string; total: number; creado: string; guia: string; items: string };
+  cliente: string; tel: string; leadId: string;
+}
+export const apiPedidosRepetidos = () => req<{ pares: ParRepetido[] }>('/api/pedidos-repetidos', 'GET');
+export const apiCancelarRepetido = (rowId: string) => req<{ ok: true; nota: string }>(`/api/pedidos-repetidos/${rowId}/cancelar`, 'POST');
+export const apiNoEsRepetido = (rowId: string) => req<{ ok: boolean }>(`/api/pedidos-repetidos/${rowId}/no-es`, 'POST');
+
+// ── Tipo de negocio (la plantilla viene preinstalada) ──
+export interface TipoNegocio { id: string; nombre: string; descripcion: string; disponible: boolean; plantilla: string; color: string }
+export const apiTiposNegocio = () => req<{ plantillas: Plantilla[]; tipos: TipoNegocio[]; tipo: string }>('/api/plantillas', 'GET');
+export const apiElegirTipoNegocio = (tipo: string) => req<{ ok: true }>('/api/tipo-negocio', 'POST', { tipo });
+
+// ── Envíos DealFlow (integración de envíos de DealFlow) ──
+export interface OrigenEnviosDF { nombre: string; empresa: string; telefono: string; email: string; direccion: string; referencia: string; departamento: string; ciudad: string; nit: string }
+export interface PaqueteEnviosDF { largo: number; ancho: number; alto: number; peso: number; contenido: string }
+export interface EstadoEnviosDF {
+  activo: boolean; aceptado: { por: string; at: string; version: string } | null; terminos: { version: string; texto: string[] }; terminosNuevos: boolean;
+  disponible: boolean; origen: OrigenEnviosDF; paquete: PaqueteEnviosDF; faltaOrigen: string[]; saldo: number; tarifas: { propio: number; dealshop: number; recargaMin: number };
+}
+export interface TarifaEnviosDF { id: string; transportadora: string; servicio: string; precio: number; dias: number | null; servicio_df: number; total: number }
+export const apiEnviosDF = () => req<EstadoEnviosDF>('/api/envios-df', 'GET');
+export const apiActivarEnviosDF = () => req<{ ok: true }>('/api/envios-df/activar', 'POST', { acepto: true });
+export const apiDesactivarEnviosDF = () => req<{ ok: true }>('/api/envios-df/desactivar', 'POST');
+export const apiOrigenEnviosDF = (origen: Partial<OrigenEnviosDF>, paquete: Partial<PaqueteEnviosDF>) => req<{ ok: true }>('/api/envios-df/origen', 'PUT', { origen, paquete });
+export const apiCotizarEnviosDF = (rowId: string) => req<{ ciudad: string; tarifas: TarifaEnviosDF[]; noDisponibles: { nombre: string; motivo: string }[]; saldo: number; cod: boolean }>(`/api/orders/${rowId}/envios-df/cotizar`, 'POST');
+export const apiDespacharEnviosDF = (rowId: string, tarifaId: string) => req<{ ok: true; guia: string }>(`/api/orders/${rowId}/envios-df/despachar`, 'POST', { tarifaId });
