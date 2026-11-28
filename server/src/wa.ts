@@ -222,9 +222,15 @@ export function saveIncomingMessage(storeId: string, waId: string, nombre: strin
   // El mensaje del cliente se guarda SIEMPRE primero: ninguna falla de atribución
   // de anuncio puede hacer que se pierda un mensaje entrante (crítico para leads de
   // anuncio, cuyo primer mensaje trae el `referral`).
+  const msgId = uid();
   db.prepare('INSERT INTO messages (id, lead_id, de, texto, tipo, media_url, media_mime, media_nombre, wa_msg_id, cita_texto, cita_de) VALUES (?,?,?,?,?,?,?,?,?,?,?)').run(
-    uid(), leadId, 'cliente', texto, media?.tipo || 'texto', media?.url || null, media?.mime || null, media?.nombre || null, wamid || null, citaTexto, citaDe,
+    msgId, leadId, 'cliente', texto, media?.tipo || 'texto', media?.url || null, media?.mime || null, media?.nombre || null, wamid || null, citaTexto, citaDe,
   );
+  // Nota de voz: se pasa a texto apenas llega (se ve debajo del audio en el Inbox, como en WhatsApp),
+  // aunque el chat lo atienda una persona. Solo si la tienda tiene su clave de OpenAI.
+  const transcripcion: Promise<string> = media?.tipo === 'audio' && !texto.trim() && media.url
+    ? import('./ai.js').then((a) => a.transcribirMensaje(storeId, msgId)).catch(() => '')
+    : Promise.resolve('');
   // Atribución de campaña: si el mensaje entró por un anuncio, lo guardamos en el
   // lead. Protegido para no tumbar nunca el guardado del mensaje.
   if (ad) { try { guardarAdEnLead(leadId, ad); } catch (e) { console.error('[webhook] no se pudo guardar atribución de anuncio (el mensaje sí se guardó):', e); } }
@@ -246,16 +252,18 @@ export function saveIncomingMessage(storeId: string, waId: string, nombre: strin
         const pv = await import('./bodegas.js');
         if (await pv.alEscribirProveedor(storeId, leadId)) return;
       } catch (e) { console.error('[bodegas] mensaje entrante', e); }
+      // Lo que dijo el cliente: su texto o, si mandó una nota de voz, lo que dice el audio.
+      const dicho = texto.trim() ? texto : await transcripcion;
       // ¿Es la respuesta Sí/No a la confirmación de un pedido de Shopify? Entonces no contesta el bot.
       try {
         const sp = await import('./shopifyPedidos.js');
-        if (await sp.respuestaConfirmacion(storeId, leadId, texto)) return;
-        await sp.respuestaCancelacion(storeId, leadId, texto);
+        if (await sp.respuestaConfirmacion(storeId, leadId, dicho)) return;
+        await sp.respuestaCancelacion(storeId, leadId, dicho);
       } catch (e) { console.error('[shopify] respuesta de confirmación', e); }
       // ¿Responde «nuevo» o «modificar» a la pregunta sobre su pedido que ya tiene guía?
       try {
         const cp = await import('./cambiosPedido.js');
-        if (await cp.respuestaCambioPedido(storeId, leadId, texto)) return;
+        if (await cp.respuestaCambioPedido(storeId, leadId, dicho)) return;
       } catch (e) { console.error('[pedido] respuesta de cambio', e); }
       const a = await import('./ai.js');
       await a.maybeAutoReply(storeId, leadId);

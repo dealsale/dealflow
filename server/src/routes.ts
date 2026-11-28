@@ -4004,6 +4004,20 @@ api.post('/leads/:id/media', requireAuth, requireStore, requirePermiso('chats'),
 });
 
 // Reintenta enviar un mensaje SALIENTE que falló (o cualquiera del bot/vendedor).
+// Pasar a texto una nota de voz del cliente a pedido (audios viejos o que no se transcribieron al llegar).
+api.post('/messages/:id/transcribir', requireAuth, requireStore, async (req, res) => {
+  const sid = req.user!.storeId!;
+  const m = db.prepare("SELECT m.id, m.tipo, m.texto FROM messages m JOIN leads l ON l.id = m.lead_id WHERE m.id = ? AND l.store_id = ?").get(req.params.id, sid) as { id: string; tipo: string; texto: string | null } | undefined;
+  if (!m) return res.status(404).json({ error: 'Mensaje no encontrado.' });
+  if (m.tipo !== 'audio') return res.status(400).json({ error: 'Ese mensaje no es una nota de voz.' });
+  if (String(m.texto || '').trim()) return res.json({ texto: String(m.texto).trim() });
+  const a = await import('./ai.js');
+  if (!a.puedeTranscribir(sid)) return res.status(400).json({ error: 'Para ver el texto de los audios, conecta tu clave de OpenAI en Integraciones.' });
+  const texto = await a.transcribirMensaje(sid, m.id);
+  if (!texto) return res.status(502).json({ error: 'No pudimos pasar este audio a texto. Revisa que tu clave de OpenAI tenga saldo e intenta de nuevo.' });
+  res.json({ texto });
+});
+
 api.post('/messages/:id/reenviar', requireAuth, requireStore, async (req, res) => {
   const sid = req.user!.storeId!;
   const m = db.prepare(

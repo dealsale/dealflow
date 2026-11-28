@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Icono, IcoTexto } from './Icono';
 import type { CSSProperties } from 'react';
 import type { DecoratedMensaje } from '../hooks/useDealFlowState';
+import { apiTranscribirAudio } from '../lib/api';
 
 /** Contenido de una burbuja de chat: texto o adjunto (imagen/video/audio/archivo). */
 export function MediaContent({ m }: { m: DecoratedMensaje }) {
@@ -27,7 +28,12 @@ export function MediaContent({ m }: { m: DecoratedMensaje }) {
     );
   }
   if (tipo === 'audio' && url) {
-    return <AudioChat url={url} />;
+    return (
+      <div>
+        <AudioChat url={url} />
+        <TextoDelAudio m={m} />
+      </div>
+    );
   }
   if (tipo === 'document' && url) {
     const linkColor: CSSProperties = { color: m.de === 'vendedor' ? '#fff' : 'var(--df-brand)', textDecoration: 'underline' };
@@ -39,6 +45,33 @@ export function MediaContent({ m }: { m: DecoratedMensaje }) {
     );
   }
   return <>{m.texto}</>;
+}
+
+/**
+ * Lo que dice una nota de voz, debajo del audio (como WhatsApp). Llega solo en cuanto se transcribe;
+ * en los audios del cliente que no tienen texto (viejos o sin transcribir) aparece «Ver texto».
+ */
+function TextoDelAudio({ m }: { m: DecoratedMensaje }) {
+  const [texto, setTexto] = useState('');
+  const [estado, setEstado] = useState<'' | 'cargando' | 'error'>('');
+  const [error, setError] = useState('');
+  const visible = (m.texto || '').trim() || texto;
+  const caja: CSSProperties = { marginTop: 6, paddingTop: 6, borderTop: '1px solid rgba(127,127,127,.25)', fontSize: 13, lineHeight: 1.45, maxWidth: 260, whiteSpace: 'pre-wrap' };
+  if (visible) return <div style={caja}>{visible}</div>;
+  if (m.de !== 'cliente' || !m.id) return null;
+  const pedir = async () => {
+    setEstado('cargando'); setError('');
+    const r = await apiTranscribirAudio(m.id!);
+    if (r.data?.texto) { setTexto(r.data.texto); setEstado(''); } else { setEstado('error'); setError(r.error || 'No se pudo pasar a texto.'); }
+  };
+  return (
+    <div style={{ marginTop: 4, fontSize: 12 }}>
+      {estado === 'cargando' ? <span style={{ opacity: 0.7 }}>Pasando a texto…</span> : (
+        <button onClick={() => void pedir()} style={{ border: 'none', background: 'transparent', padding: 0, color: 'inherit', opacity: 0.8, textDecoration: 'underline', cursor: 'pointer', font: 'inherit' }}>Ver texto</button>
+      )}
+      {estado === 'error' && <div style={{ marginTop: 3, opacity: 0.85, maxWidth: 240 }}>{error}</div>}
+    </div>
+  );
 }
 
 /** Botón de adjuntar (clip) que abre el selector de archivos. */

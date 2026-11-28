@@ -514,6 +514,7 @@ export const apiPushVapid = () => req<{ key: string; disponible: boolean }>('/ap
 export const apiPushSubscribe = (sub: unknown, prefs: { pedidos: boolean; contactos: boolean }) => req<{ ok: true }>('/api/push/subscribe', 'POST', { sub, prefs });
 export const apiPushUnsubscribe = (endpoint: string) => req<{ ok: true }>('/api/push/unsubscribe', 'POST', { endpoint });
 export const apiClearLogs = () => req<{ ok: true }>('/api/logs', 'DELETE');
+export const apiTranscribirAudio = (id: string) => req<{ texto: string }>(`/api/messages/${encodeURIComponent(id)}/transcribir`, 'POST');
 export const apiReenviarMensaje = (id: string) => req<{ ok: boolean; estado: string; error?: string }>(`/api/messages/${id}/reenviar`, 'POST');
 export const apiLeads = () => req<{ leads: ApiLead[] }>('/api/leads', 'GET');
 // Sondeo liviano del Inbox: resumen de todos los chats (sin todos sus mensajes),

@@ -172,6 +172,34 @@ async function transcribirAudio(storeId: string, mediaUrl: string): Promise<stri
   } catch (e) { console.error('[ia] error transcribiendo audio', e); return ''; }
 }
 
+/** Transcripciones en curso por mensaje: si el bot y la llegada piden la misma, se hace una sola vez. */
+const transcribiendo = new Map<string, Promise<string>>();
+/**
+ * Pasa a texto una nota de voz del cliente y lo guarda en el mismo mensaje (el Inbox lo muestra debajo
+ * del audio, como WhatsApp). Se llama apenas llega el audio, aunque el chat lo atienda una persona.
+ * Solo con la clave de OpenAI de la tienda (nunca con una de DealFlow); sin ella devuelve ''.
+ */
+export function transcribirMensaje(storeId: string, msgId: string): Promise<string> {
+  const ya = transcribiendo.get(msgId);
+  if (ya) return ya;
+  const p = (async () => {
+    const m = db.prepare('SELECT texto, tipo, media_url FROM messages WHERE id = ?').get(msgId) as { texto: string | null; tipo: string; media_url: string | null } | undefined;
+    if (!m || m.tipo !== 'audio' || !m.media_url) return '';
+    if (String(m.texto || '').trim()) return String(m.texto).trim();
+    const t = await transcribirAudio(storeId, m.media_url);
+    if (t) {
+      db.prepare("UPDATE messages SET texto = ? WHERE id = ? AND COALESCE(texto, '') = ''").run(t, msgId);
+      console.log(`[ia] audio → texto (OpenAI): ${t.slice(0, 90)}`);
+    }
+    return t;
+  })().catch((e) => { console.error('[ia] transcribir mensaje', e); return ''; })
+    .finally(() => { setTimeout(() => transcribiendo.delete(msgId), 60_000); });
+  transcribiendo.set(msgId, p);
+  return p;
+}
+/** ¿La tienda puede pasar audios a texto? (tiene su propia clave de OpenAI) */
+export const puedeTranscribir = (storeId: string) => !!keyProveedor(storeId, 'openai');
+
 /**
  * Lee una imagen con OpenAI (visión): qué es y, sobre todo, el TEXTO que se ve (una captura con la
  * dirección, un comprobante, un documento…). Antes solo decía «qué tipo de cosa es» y el bot nunca
@@ -432,7 +460,7 @@ const MECANICA_MARCADORES = `FORMATO DE RESPUESTA (OBLIGATORIO): responde SIEMPR
 
 PRODUCTO CORRECTO (muy importante): si el cliente nombra un producto de forma general y en el CATÁLOGO hay VARIOS productos que coinciden con ese nombre (por ejemplo pide "jogger" y existen "Jogger Bota Recta Hombre", "Jogger Bota Recta Dama", "Jogger Clásico", "Jogger Clásico Dama"), NO adivines ni elijas uno al azar: pregúntale al cliente CUÁL de esos modelos exactos quiere y NO envíes fotos ni pongas el marcador todavía. Solo cuando quede claro el modelo exacto, usa su NOMBRE EXACTO del catálogo en el marcador con el formato ##MEDIA:Nombre exacto del producto## (siempre con dos puntos y el nombre; nunca "##MEDIA" suelto).
 
-FOTOS Y VIDEOS: cuando el cliente pregunte o muestre interés en un producto específico (aunque lo nombre de forma informal, ej. "la camisa"), incluye al inicio de tu respuesta, en una línea sola, el marcador ##MEDIA:Nombre exacto del producto del catálogo## y luego una frase MUY corta de cierre (una pregunta). Si el cliente pide en general "fotos", "imágenes", "más fotos", "videos" o material del producto SIN nombrar un color, usa SIEMPRE ##MEDIA:Nombre exacto## (sin barra ni color): el sistema envía TODAS las fotos y videos. Usa ##MEDIA:Nombre del producto|Color## SOLO si pide expresamente la foto de un color específico Y ese color muestra 📷 en el catálogo. Si el color que pide NO tiene 📷, NO prometas enviar su foto ni pongas el marcador: dile con amabilidad que puedes mostrarle el catálogo de colores o las fotos generales, y ofrécelas con ##MEDIA:Nombre exacto##. El sistema envía la multimedia automáticamente; no digas que "no puedes enviar fotos".
+FOTOS Y VIDEOS: cuando el cliente pregunte o muestre interés en un producto específico (aunque lo nombre de forma informal, ej. "la camisa"), incluye al inicio de tu respuesta, en una línea sola, el marcador ##MEDIA:Nombre exacto del producto del catálogo## y luego una frase MUY corta de cierre (una pregunta). Si el cliente pide en general "fotos", "imágenes", "más fotos", "videos" o material del producto SIN nombrar un color, usa SIEMPRE ##MEDIA:Nombre exacto## (sin barra ni color): el sistema envía TODAS las fotos y videos. Usa ##MEDIA:Nombre del producto|Opción## (la opción es el color, la talla u otro valor EXACTO como aparece en el catálogo) SOLO si pide la foto de esa opción específica Y esa opción muestra 📷 en el catálogo. TALLAS CON FOTO: si una talla muestra 📷, su foto enseña cómo se ve o cómo queda esa talla puesta. Si el cliente pregunta cómo le queda, cómo se ve o cómo le quedaría una talla que tiene 📷 (o le ofreciste verla y te dice que sí), envíasela con ##MEDIA:Nombre exacto del producto|Talla##. Si duda entre tallas o elige una talla que tiene 📷, puedes ofrecerle con naturalidad ver cómo le quedaría. Si la opción que pide NO tiene 📷, NO prometas enviar su foto ni pongas el marcador: dile con amabilidad que puedes mostrarle el catálogo o las fotos generales, y ofrécelas con ##MEDIA:Nombre exacto##. El sistema envía la multimedia automáticamente; no digas que "no puedes enviar fotos".
 
 CERRAR EL PEDIDO: cuando el cliente confirme que quiere comprar Y ya tengas su NOMBRE, CELULAR, CIUDAD y DIRECCIÓN, agrega al final de tu respuesta, en una línea sola, EXACTAMENTE con este formato:
 ##PEDIDO cliente="Nombre Apellido"; telefono="CELULAR QUE EL CLIENTE ESCRIBIÓ"; departamento="Departamento"; ciudad="Ciudad"; direccion="Dirección exacta con punto de referencia"; items="1x Nombre exacto del producto (Talla M · Negro), 1x Nombre exacto del producto (Talla M · Gris), 1x Otro producto (Talla L · Rojo)"; total="180000"##
@@ -572,12 +600,8 @@ async function responderTurno(storeId: string, leadId: string) {
     | { id: string; texto: string; tipo: string; media_url: string | null }
     | undefined;
   if (umedia && umedia.media_url && !String(umedia.texto || '').trim() && umedia.tipo === 'audio') {
-    const reconocido = await transcribirAudio(storeId, umedia.media_url);
-    if (reconocido) {
-      // El audio se transcribe al texto (se lee en el chat).
-      db.prepare('UPDATE messages SET texto = ? WHERE id = ?').run(reconocido, umedia.id);
-      console.log(`[ia] audio → texto (OpenAI): ${reconocido.slice(0, 90)}`);
-    }
+    // El audio se transcribe al texto (se lee en el chat). Si ya se estaba transcribiendo al llegar, espera esa misma.
+    await transcribirMensaje(storeId, umedia.id);
   }
   // Fotos y PDF: el texto que se lee (direcciones, comprobantes…) queda como nota para el bot.
   await leerAdjuntosCliente(storeId, leadId, ia.proveedor).catch((e) => console.error('[ia] leer adjuntos', e));
@@ -900,17 +924,35 @@ ${MECANICA_MARCADORES}`;
     // cliente pidió fotos explícitamente (red de seguridad, igual que la del pedido).
     const nombreMarca = fotosHerramienta ?? (m && m[1] ? m[1].replace('|', ' ').trim() : '');
     const pidioMedia = ultimo?.tipo === 'texto' && pidioFotos(ultimo?.texto || '');
-    if (m || fotosHerramienta !== null || pidioMedia) {
+    // Lo que dijo el cliente (texto o lo que decía su nota de voz) y si solo dijo que sí.
+    const dijoCliente = ultimo && (ultimo.tipo === 'texto' || ultimo.tipo === 'audio') ? String(ultimo.texto || '') : '';
+    const dijoQueSi = !!dijoCliente && diceQueSi(dijoCliente);
+    // Red de seguridad de las tallas (u opciones) con foto: el bot le ofreció ver cómo le queda una
+    // talla que tiene foto y el cliente dijo que sí, pero la IA no puso el marcador → se la mandamos.
+    let ofertaFoto: { prod: Record<string, unknown>; valor: string } | null = null;
+    if (!m && fotosHerramienta === null && !pidioMedia && dijoQueSi) {
+      const txtBot = ultimoTextoBot(leadId);
+      if (txtBot.includes('?') && /\b(ver|veas|verla|verlo|mostrar|mostrarte|muestre|enviar|enviarte|mandar|mandarte|quedaria|queda|queden)\b/.test(norm(txtBot))) {
+        const contexto = historia.map((h) => h.content).filter(Boolean).join(' ');
+        const pr = resolverProductoYColor(txtBot, productRows).prod || resolverProductoYColor(contexto, productRows).prod || (activos.length === 1 ? activos[0] : null);
+        const valor = pr ? valorEnTexto(pr, txtBot, true) : '';
+        if (pr && valor) ofertaFoto = { prod: pr, valor };
+      }
+    }
+    if (m || fotosHerramienta !== null || pidioMedia || ofertaFoto) {
       // De QUÉ producto: el nombre del marcador; si no trae nombre, el texto del
       // cliente; si aún no resuelve, el último producto hablado en el chat; y si la
       // tienda tiene un solo producto activo, ese.
-      const r0 = resolverProductoYColor(nombreMarca || ultimo?.texto || '', productRows);
+      const r0 = ofertaFoto ? { prod: ofertaFoto.prod, valName: ofertaFoto.valor } : resolverProductoYColor(nombreMarca || ultimo?.texto || '', productRows);
       let prod = r0.prod;
-      const valName = r0.valName;
+      let valName = r0.valName;
       if (!prod) {
         const contexto = historia.map((h) => h.content).filter(Boolean).join(' ');
         prod = resolverProductoYColor(contexto, productRows).prod || (activos.length === 1 ? activos[0] : null);
       }
+      // El cliente dijo «sí» a ver una talla (u opción) con foto y la IA marcó el producto sin la talla:
+      // se toma la que le ofreció el bot en su último mensaje.
+      if (prod && !valName && dijoQueSi) valName = valorEnTexto(prod, ultimoTextoBot(leadId), true);
       if (prod) {
         const foto = valName ? fotoDeOpcion(prod, valName) : null;
         if (foto) {
@@ -1758,25 +1800,50 @@ function resolverProductoYColor(query: string, productRows: Record<string, unkno
     else if (Math.abs(score - bestScore) < 1e-9 && score > 0) empate = true;
   }
   if (!best || bestScore < 1 || empate) return { prod: null, valName: '' };
-  // Color/valor de opción: el que aparezca en el texto (soporta valores de 1 o 2 palabras).
+  return { prod: best, valName: valorEnTexto(best, query) };
+}
+
+/**
+ * Color/talla/valor de opción de un producto que aparece en un texto (valores de 1 o 2 palabras).
+ * Las tallas cortas (S, M, L, XL, 38…) deben coincidir EXACTO: si no, «les» contaría como talla L.
+ * Con `soloConFoto`, solo cuenta los valores que tienen foto propia.
+ */
+function valorEnTexto(prod: Record<string, unknown>, texto: string, soloConFoto = false): string {
+  const q = norm(texto);
+  const qw = new Set(q.split(' ').filter(Boolean));
   let valName = '';
-  for (const o of pj<{ valores: (string | { valor: string })[] }[]>(best.opciones as string, [])) {
+  for (const o of pj<{ valores: (string | { valor: string; foto?: string })[] }[]>(prod.opciones as string, [])) {
     for (const v of o.valores || []) {
       const val = typeof v === 'string' ? v : v?.valor;
-      if (!val) continue;
+      if (!val || (soloConFoto && (typeof v === 'string' || !v.foto))) continue;
       const nv = norm(val);
-      if (enQuery(nv, qw) || (nv.includes(' ') && q.includes(nv))) valName = val;
+      if (!nv) continue;
+      const corto = nv.length <= 2 || /^\d+$/.test(nv);
+      if ((corto ? qw.has(nv) : enQuery(nv, qw)) || (nv.includes(' ') && q.includes(nv))) valName = val;
     }
   }
-  return { prod: best, valName };
+  return valName;
 }
+
+/** Último texto que le escribió el bot (o el equipo) al cliente: lo que le ofreció antes de su respuesta. */
+function ultimoTextoBot(leadId: string): string {
+  const r = db.prepare("SELECT texto FROM messages WHERE lead_id = ? AND de != 'cliente' AND COALESCE(texto, '') != '' ORDER BY created_at DESC LIMIT 1").get(leadId) as { texto: string } | undefined;
+  return r?.texto || '';
+}
+
+/** ¿El cliente dice que sí a ver algo que le ofrecieron? (sí, dale, quiero verla, muéstrame…) */
+const diceQueSi = (t: string) => esAfirmacion(t) || (/^(quiero verla|quiero verlo|quiero ver|a ver|muestrame|muestramela|enviamela|mandamela|porfa|por favor|bueno)\b/.test(norm(t)) && norm(t).split(' ').length <= 6);
 
 /** Busca la foto de una opción por su valor (ej: "Blanco"). */
 function fotoDeOpcion(prod: Record<string, unknown>, valName: string): string | null {
   const v = norm(valName);
   const ops = pj<{ valores: (string | { valor: string; foto?: string })[] }[]>(prod.opciones as string, []);
   const items = ops.flatMap((o) => o.valores || []).filter((x): x is { valor: string; foto?: string } => typeof x !== 'string' && !!x.foto);
-  return (items.find((x) => norm(x.valor) === v) || items.find((x) => norm(x.valor).includes(v) || v.includes(norm(x.valor))))?.foto || null;
+  const exacta = items.find((x) => norm(x.valor) === v);
+  if (exacta) return exacta.foto || null;
+  // Parecida solo con valores largos: con tallas cortas, «L» no puede traer la foto de «XL».
+  if (v.length < 3) return null;
+  return items.find((x) => norm(x.valor).length >= 3 && (norm(x.valor).includes(v) || v.includes(norm(x.valor))))?.foto || null;
 }
 
 /** Envía una sola foto (ej: la de una opción de color) sin marcar presentación. */
