@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Icono, IcoTexto } from './Icono';
 import { cambiarIdiomaUI, idiomaUI, t } from '../i18n/traductor';
 import type { DealFlowState } from '../hooks/useDealFlowState';
-import { apiOlvide, apiRestablecer, apiValidarRestablecer } from '../lib/api';
+import { apiOlvide, apiRestablecer, apiValidarRestablecer, apiQuienInvita, codigoReferido, olvidarReferido } from '../lib/api';
 import logo from '../assets/logo.png';
 
 /*
@@ -271,7 +271,14 @@ function Recuperar({ modo, token, correoInicial, onListo }: { modo: 'pedir' | 'n
 }
 
 export function Login({ df }: { df: DealFlowState }) {
-  const [modo, setModo] = useState<'login' | 'registro'>('login');
+  // Si llegó por un link de referidos (?ref=…), abre directo en «Crear cuenta».
+  const [modo, setModo] = useState<'login' | 'registro'>(() => (new URLSearchParams(location.search).get('ref') ? 'registro' : 'login'));
+  const [invita, setInvita] = useState('');
+  useEffect(() => {
+    const c = codigoReferido();
+    if (!c) return;
+    void apiQuienInvita(c).then((r) => { if (r.data?.nombre) setInvita(r.data.nombre); else if (r.error) olvidarReferido(); });
+  }, []);
   const [nombre, setNombre] = useState('');
   const [negocio, setNegocio] = useState('');
   const [email, setEmail] = useState('');
@@ -390,6 +397,11 @@ export function Login({ df }: { df: DealFlowState }) {
               <div style={{ color: C.muted, fontSize: 13.5, marginBottom: 22, lineHeight: 1.5 }}>
                 {esRegistro ? 'Regístrate y deja que la IA empiece a vender por ti.' : 'Tu tienda y tu asistente de WhatsApp te están esperando.'}
               </div>
+              {esRegistro && invita && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '-10px 0 18px', padding: '9px 12px', borderRadius: 10, border: `1px solid ${C.lineStrong}`, background: 'rgba(52,211,153,.08)', fontSize: 13, color: C.text }}>
+                  <Icono nombre="regalo" tam={16} color={C.green} />Te invitó <b>{invita}</b>
+                </div>
+              )}
 
               <form onSubmit={(e) => { e.preventDefault(); void entrar(); }}>
                 {esRegistro && (

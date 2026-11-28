@@ -250,10 +250,10 @@ export function esPedidoDF(storeId: string, orderId: string): boolean {
 }
 
 // ── Billetera ───────────────────────────────────────────────────────────────
-export type TipoMov = 'recarga' | 'despacho' | 'servicio' | 'reintegro' | 'recaudo' | 'devolucion' | 'retiro' | 'retiro_reverso' | 'ajuste';
+export type TipoMov = 'recarga' | 'despacho' | 'servicio' | 'reintegro' | 'recaudo' | 'devolucion' | 'retiro' | 'retiro_reverso' | 'ajuste' | 'referido';
 export const NOMBRE_MOV: Record<TipoMov, string> = {
   recarga: 'Recarga', despacho: 'Despacho', servicio: 'Servicio de guía DealFlow', reintegro: 'Reintegro', recaudo: 'Pago del cliente (contra entrega)', devolucion: 'Flete de devolución',
-  retiro: 'Retiro', retiro_reverso: 'Retiro rechazado (devuelto)', ajuste: 'Ajuste de DealFlow',
+  retiro: 'Retiro', retiro_reverso: 'Retiro rechazado (devuelto)', ajuste: 'Ajuste de DealFlow', referido: 'Ganancia por referido',
 };
 export function saldoBilletera(storeId: string): number {
   return num((db.prepare('SELECT COALESCE(SUM(monto),0) s FROM billetera_mov WHERE store_id = ?').get(storeId) as { s: number }).s);

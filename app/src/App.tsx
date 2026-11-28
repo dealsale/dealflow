@@ -54,6 +54,7 @@ import { Cuentas } from './sections/admin/Cuentas';
 import { PlantillasWA } from './sections/admin/PlantillasWA';
 import { Planes } from './sections/admin/Planes';
 import { Cupones } from './sections/admin/Cupones';
+import { Referidos } from './sections/admin/Referidos';
 import { Contabilidad } from './sections/admin/Contabilidad';
 import { Superadmin, BibliotecaAdmin } from './sections/admin/Superadmin';
 import { MCRM } from './sections/mobile/MCRM';
@@ -395,6 +396,7 @@ function AdminContent({ df }: { df: DealFlowState }) {
       {df.adminSection === 'planes' && <Planes df={df} />}
       {df.adminSection === 'cuentas' && <Cuentas df={df} />}
       {df.adminSection === 'cupones' && <Cupones df={df} />}
+      {df.adminSection === 'referidos' && df.isSuperadmin && <Referidos />}
       {df.adminSection === 'biblioteca' && (
         <section data-screen-label="Biblioteca admin">
           <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: 0 }}>Biblioteca de productos</h1>

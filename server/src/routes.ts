@@ -2,6 +2,7 @@ import { mensajesDe as mensajesInicialesDe, normalizarMensajes, principal } from
 import express, { Router } from 'express';
 import { rutasEscritorio } from './escritorioRutas.js';
 import { rutasBodegaDF } from './bodegaDFRutas.js';
+import { rutasReferidos, vincularPorLink } from './referidos.js';
 import type { Request as ExRequest, Response as ExResponse } from 'express';
 import { trazar, conPedido } from './trazabilidad.js';
 import { requirePermiso, permisosDe, PERMISOS, rolesTienda, guardarRol, borrarRol, nombreRol } from './roles.js';
@@ -37,6 +38,7 @@ export const api = proteger(Router());
 // App de escritorio «DealFlow Soporte» (acceso a todo el computador de la tienda).
 rutasEscritorio(api);
 rutasBodegaDF(api);
+rutasReferidos(api);
 // Registro de accesos del equipo (administradores y soporte dentro de una tienda).
 api.use(registrarAccesosEquipo);
 // Al crear/editar productos o variantes (o marcarlos de Effi), se vinculan solos con Effi.
@@ -141,6 +143,8 @@ api.post('/auth/registro', (req, res) => {
     });
     crear();
     void import('./plantillas.js').then((p) => p.preinstalarPlantilla(storeId)).catch(() => {});
+    // Llegó por el link de referidos de una cuenta: queda en su red.
+    if (req.body?.ref) { try { vincularPorLink(storeId, String(req.body.ref)); } catch (e) { console.error('[referidos] registro', e); } }
   } catch (e) {
     console.error('[registro] error', e);
     return res.status(500).json({ error: 'No pudimos crear tu cuenta. Intenta de nuevo; si sigue fallando, escríbenos.' });

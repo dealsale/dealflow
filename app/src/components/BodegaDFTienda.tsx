@@ -20,7 +20,7 @@ const fecha = (s: string) => { if (!s) return ''; const d = new Date(/[zZ]$/.tes
 const MOV: Record<string, { color: string; icono: NombreIcono }> = {
   recarga: { color: '#34D399', icono: 'billetera' }, recaudo: { color: '#10B981', icono: 'dinero' }, reintegro: { color: '#60A5FA', icono: 'devolver' },
   despacho: { color: '#A78BFA', icono: 'despachar' }, servicio: { color: '#818CF8', icono: 'guia' }, devolucion: { color: '#FB923C', icono: 'devuelto' }, retiro: { color: '#F472B6', icono: 'pago' },
-  retiro_reverso: { color: '#60A5FA', icono: 'devolver' }, ajuste: { color: '#FBBF24', icono: 'ajustes' },
+  retiro_reverso: { color: '#60A5FA', icono: 'devolver' }, ajuste: { color: '#FBBF24', icono: 'ajustes' }, referido: { color: '#34D399', icono: 'regalo' },
 };
 /** Color del estado de cada pedido de la bodega. */
 const EST: Record<string, { color: string; icono: NombreIcono }> = {

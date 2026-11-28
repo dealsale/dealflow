@@ -185,6 +185,7 @@ export function Sidebar({ df }: { df: DealFlowState }) {
             {adminItem('planes', <IconPlanes />, 'Planes')}
             {adminItem('cuentas', <IconCuentas />, 'Cuentas')}
             {adminItem('cupones', <Icono nombre="cupon" tam={17} grosor={1.8} />, 'Cupones')}
+            {df.isSuperadmin && adminItem('referidos', <Icono nombre="regalo" tam={17} grosor={1.8} />, 'Referidos')}
             {adminItem('biblioteca', <IconBiblioteca />, 'Biblioteca')}
             </>}
           </nav>

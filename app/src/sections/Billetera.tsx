@@ -1,5 +1,6 @@
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import { BodegaDFTiendaPanel } from '../components/BodegaDFTienda';
+import { ReferidosTienda } from '../components/ReferidosTienda';
 
 /**
  * Billetera de la tienda (se entra desde el perfil, arriba): saldo, recargas, retiros, movimientos y
@@ -14,7 +15,7 @@ export function Billetera({ df }: { df: DealFlowState }) {
           Recarga, retira y mira cada movimiento. Aquí se descuentan las guías de DealShop y de Envíos DealFlow, y llega lo que pagan tus clientes contraentrega.
         </p>
       </div>
-      {df.esDueno ? <BodegaDFTiendaPanel /> : (
+      {df.esDueno ? <><ReferidosTienda /><BodegaDFTiendaPanel /></> : (
         <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, padding: '30px 20px', textAlign: 'center', color: 'var(--df-text-muted)', fontSize: 14 }}>
           La billetera solo la ve el dueño de la tienda.
         </div>

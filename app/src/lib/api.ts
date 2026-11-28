@@ -263,16 +263,23 @@ export const apiCupones = () => req<{ cupones: Cupon[] }>('/api/admin/cupones', 
 export const apiCrearCupon = (c: NuevoCupon) => req<{ id: string; codigo: string }>('/api/admin/cupones', 'POST', c);
 export const apiToggleCupon = (id: string, activo: boolean) => req<{ ok: true }>(`/api/admin/cupones/${id}`, 'PATCH', { activo });
 export const apiEliminarCupon = (id: string) => req<{ ok: true }>(`/api/admin/cupones/${id}`, 'DELETE');
+// Link de referidos (app.dealflow.sbs/?ref=CODIGO): se guarda apenas abre la página para mandarlo al crear la cuenta.
+try { const r = new URLSearchParams(location.search).get('ref'); if (r) localStorage.setItem('dealflow:ref', r.slice(0, 40)); } catch { /* sin almacenamiento */ }
+export const codigoReferido = () => { try { return localStorage.getItem('dealflow:ref') || ''; } catch { return ''; } };
+export const olvidarReferido = () => { try { localStorage.removeItem('dealflow:ref'); } catch { /* nada */ } };
+export const apiQuienInvita = (codigo: string) => req<{ nombre: string }>(`/api/referidos/codigo/${encodeURIComponent(codigo)}`, 'GET');
+
 export async function apiRegistro(nombre: string, negocio: string, correo: string, password: string): Promise<{ user?: ApiUser; error?: string }> {
   try {
     const r = await fetch('/api/auth/registro', {
       method: 'POST',
       credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nombre, negocio, correo, password }),
+      body: JSON.stringify({ nombre, negocio, correo, password, ref: codigoReferido() || undefined }),
     });
     const b = (await r.json()) as { user?: ApiUser; error?: string };
     if (!r.ok) return { error: b.error || 'No pudimos crear tu cuenta. Intenta de nuevo.' };
+    olvidarReferido();
     return { user: b.user };
   } catch {
     return { error: 'No pudimos hablar con el servidor. Revisa tu conexión.' };
@@ -986,6 +993,23 @@ export const apiRecargarBilletera = (monto: number) => req<{ url: string; shopif
 export const apiRetiroBilletera = (monto: number, datos: string) => req<{ ok: true }>('/api/bodega-df/retiro', 'POST', { monto, datos });
 export const apiDespacharDF = (id: string) => req<{ ok: true; guia: string }>(`/api/bodega-df/pedidos/${encodeURIComponent(id)}/despachar`, 'POST');
 export const apiResolverEscaladoDF = (id: string, respuesta: string) => req<{ ok: true }>(`/api/bodega-df/pedidos/${encodeURIComponent(id)}/resolver`, 'POST', { respuesta });
+
+// ── Referidos ──
+export type EstadoReferida = 'sin_activar' | 'activa' | 'vencida';
+export interface CuentaReferida { id: string; nombre: string; correo?: string; origen: 'link' | 'manual'; desde: string; estado: EstadoReferida; vence: string; plan: string; ganado: number; pagos: number }
+export interface ProgramaReferidos {
+  activo: boolean; codigo: string; monto: number; ganado: number; ganadoMes: number; red: CuentaReferida[];
+  abonos: { id: string; cuenta: string; tipo: string; monto: number; fecha: string }[];
+}
+export interface ReferidorAdmin { storeId: string; nombre: string; correo: string; codigo: string; monto: number; activo: boolean; desde: string; ganado: number; ganadoMes: number; red: CuentaReferida[] }
+export interface ReferidosAdmin { cuentas: ReferidorAdmin[]; tiendas: { id: string; nombre: string; correo: string; red: string }[]; totalAbonado: number; abonadoMes: number; montoPorDefecto: number }
+export const linkReferido = (codigo: string) => `${location.origin}/?ref=${encodeURIComponent(codigo)}`;
+export const apiReferidos = () => req<{ programa: ProgramaReferidos | null }>('/api/referidos', 'GET');
+export const apiReferidosAdmin = () => req<ReferidosAdmin>('/api/superadmin/referidos', 'GET');
+export const apiActivarReferidor = (storeId: string, monto: number) => req<{ ok: true; codigo: string }>('/api/superadmin/referidos', 'POST', { storeId, monto });
+export const apiEditarReferidor = (storeId: string, cambios: { monto?: number; activo?: boolean; codigo?: string }) => req<{ ok: true }>(`/api/superadmin/referidos/${encodeURIComponent(storeId)}`, 'PATCH', cambios);
+export const apiAgregarARed = (referidorId: string, storeId: string) => req<{ ok: true; movida: string }>(`/api/superadmin/referidos/${encodeURIComponent(referidorId)}/red`, 'POST', { storeId });
+export const apiQuitarDeRed = (storeId: string) => req<{ ok: true }>(`/api/superadmin/referidos/red/${encodeURIComponent(storeId)}`, 'DELETE');
 
 export interface BodegaProvDF { empresa: string; telefono: string; email: string; direccion: string; referencia: string; departamento: string; ciudad: string; nit: string }
 export interface AjustesDF { comisionPct: number; comisionFija: number; fleteDevolucionPct: number; recargaMin: number; retiroMin: number; tarifaTienda: number; tarifaProveedor: number; tarifaPropia: number }

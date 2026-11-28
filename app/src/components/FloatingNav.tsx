@@ -99,6 +99,7 @@ export function FloatingNav({ df }: { df: DealFlowState }) {
                     {fila(aSection === 'superadmin', () => goA('superadmin'), <IconCuentas />, 'Todas las tiendas', undefined, urlDe({ mode: 'admin', adminSection: 'superadmin' }))}
                     {fila(aSection === 'plantillas', () => goA('plantillas'), <Icono nombre="plantillas" tam={17} grosor={1.8} />, 'Plantillas WA', undefined, urlDe({ mode: 'admin', adminSection: 'plantillas' }))}
                     {fila(aSection === 'contabilidad', () => goA('contabilidad'), <IconVentas />, 'Contabilidad', undefined, urlDe({ mode: 'admin', adminSection: 'contabilidad' }))}
+                    {fila(aSection === 'referidos', () => goA('referidos'), <Icono nombre="regalo" tam={17} grosor={1.8} />, 'Referidos', undefined, urlDe({ mode: 'admin', adminSection: 'referidos' }))}
                     {fila(aSection === 'equipo', () => goA('equipo'), <Icono nombre="equipoDF" tam={17} grosor={1.8} />, 'Equipo DealFlow', undefined, urlDe({ mode: 'admin', adminSection: 'equipo' }))}
                     {fila(aSection === 'soporte', () => goA('soporte'), <Icono nombre="soporte" tam={17} grosor={1.8} />, 'Soporte en vivo', undefined, urlDe({ mode: 'admin', adminSection: 'soporte' }))}
                     {fila(aSection === 'proveedores', () => goA('proveedores'), <Icono nombre="aliado" tam={17} grosor={1.8} />, 'Proveedores', undefined, urlDe({ mode: 'admin', adminSection: 'proveedores' }))}

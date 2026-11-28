@@ -474,6 +474,8 @@ export function aplicarPagoAprobado(referencia: string, transaccion?: string, de
     db.prepare("UPDATE stores SET plan_estado = 'activa', plan_vence = ?, activa = 1 WHERE id = ?").run(nuevaFecha, pago.store_id);
     console.log(`[suscripcion] RENTA aprobada ${referencia} → tienda ${pago.store_id} al día hasta ${nuevaFecha}`);
   }
+  // Referidos: si esta cuenta está en la red de otra, a esa le abonamos su parte (activación o mensualidad).
+  setImmediate(() => { void import('./referidos.js').then((r) => r.abonarPorPago(pago.store_id, referencia, pago.tipo)).catch((e) => console.error('[referidos] pago', referencia, e)); });
   const pasarela = pago.gateway === 'bold' ? 'Bold' : pago.gateway === 'shopify' ? 'Shopify' : transaccion === 'CUPON-GRATIS' ? 'Cupón' : 'Wompi';
   anotarAjuste({ storeId: pago.store_id, tipo: 'pago', antes: venceAntes, despues: nuevaFecha, motivo: `${pago.tipo === 'inicial' ? 'Instalación' : 'Mensualidad'} pagada (${pasarela})${pago.cupon ? ` · cupón ${pago.cupon}` : ''}`, quien: pasarela, rol: 'pago', referencia });
   {
